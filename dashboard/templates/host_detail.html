@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ host.label or host.ip }} in {{ host.started_at|scan_name }} · LanWard{% endblock %}
+{% block content %}
+
+<h2>{{ host.label or host.hostname or host.ip }}
+  <span class="small">{{ host.ip }} in
+    <a href="{{ url_for('devices', scan=host.scan_id) }}">{{ host.started_at|scan_name }}</a>
+  </span>
+</h2>
+<p class="meta">What this one scan found.
+  {% if host.mac %}<a href="{{ url_for('host_history', mac=host.mac) }}">The device page →</a> has everything else:
+  whether it is online now, its activity, whom it talks to and every scan.{% endif %}</p>
+
+<section class="detail-grid">
+  <div class="stat cat-{{ host.category }}"><span class="sub">Category</span><strong class="cat-text">{{ host.category|cat_label }}</strong></div>
+  <div class="stat"><span class="sub">Hostname</span><strong>{{ host.hostname or '-' }}</strong></div>
+  <div class="stat"><span class="sub">Maker</span><strong>{{ vendor_or_random(host.vendor, host.mac) }}</strong></div>
+  <div class="stat"><span class="sub">MAC</span><strong>{% if host.mac %}<a href="{{ url_for('host_history', mac=host.mac) }}">{{ host.mac }}</a>{% else %}-{% endif %}</strong></div>
+</section>
+
+{% with with_findings=True %}{% include "_scan_facts.html" %}{% endwith %}
+
+{% endblock %}

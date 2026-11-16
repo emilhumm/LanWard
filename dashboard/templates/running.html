@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}What's running · Traffic · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import cat_icon with context %}
+
+{# Traffic's "What's running" (2026-11-02): every open port of the latest scan, grouped by what it is, each saying
+   how LanWard knows (portid.py); then the secure pages' certificates. Picked on the canvas "LanWard ports and
+   services", board 2. #}
+{% macro devices(e) -%}
+<span class="run-devs">
+  {%- for d in e.devices[:4] %}<a class="run-dev cat-{{ d.cat }}" href="{{ d.url }}" title="{{ d.ip }}"><span class="cat-badge sm" aria-hidden="true">{{ cat_icon(d.cat, 13) }}</span>{{ d.name }}</a>{% endfor %}
+  {%- if e.devices|length > 4 %}<span class="run-more" title="{{ e.devices[4:]|map(attribute='name')|join(', ') }}">+{{ e.devices|length - 4 }} more</span>{% endif -%}
+</span>
+{%- endmacro %}
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Traffic</h1>
+    <p class="facts">What your devices run: every open port the latest scan found, what each one is and how
+      LanWard knows. A port is asked gently, once, only when nothing else names it.</p>
+  </div>
+</section>
+
+<section class="card calm flows-card" aria-label="What's running">
+  <div class="card-head">
+    {% with items=[('Who talks to whom', 'flows'), ('Services announced', 'network_services'), ("What's running", 'running'), ('Everything heard', 'observations')], label='Traffic view' %}{% include "_subnav.html" %}{% endwith %}
+    {% if scan %}<span class="meta push-right">From {{ scan.started_at|scan_name }}</span>{% endif %}
+    <a class="icon-btn" href="{{ url_for('running', format='csv') }}" title="Download every device's ports as CSV" aria-label="Download every device's ports as CSV">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg>
+    </a>
+  </div>
+  {% if not groups %}
+  <p class="meta">No open ports in the latest scan of your network yet.</p>
+  {% else %}
+  <p class="run-facts"><strong>{{ n_ports }}</strong> open ports on <strong>{{ n_devices }}</strong> devices
+    {%- if count.web %} · <strong>{{ count.web }}</strong> web pages{% endif %}
+    {%- if count.ssh %} · <strong>{{ count.ssh }}</strong> SSH logins{% endif %}
+    {%- if count.files %} · <strong>{{ count.files }}</strong> file and media shares{% endif %}
+    {%- if certs %} · <strong>{{ certs|length }}</strong> certificates{% endif %}.
+    <span class="faint">Each says how LanWard knows what it is.</span></p>
+  {% endif %}
+</section>
+
+{% macro group_card(g) -%}
+  <section class="card calm run-card{{ ' wide' if g.key in ('web', 'unknown') }}" aria-labelledby="run-{{ g.key }}">
+    <div class="card-head">
+      <h2 class="card-title" id="run-{{ g.key }}">{{ g.title }}</h2>
+      <span class="meta">{{ g.n }} on {{ g.n_devices }} device{{ 's' if g.n_devices != 1 }} · {{ g.sub }}</span>
+    </div>
+    <div class="run-list">
+      {% for e in g['items'] %}
+      <div class="run-row">
+        <span class="run-what">
+          {%- if e.what %}{{ '' if e.sure else 'probably ' }}{{ e.what }}{% else %}<span class="faint">not identified</span>{% endif %}
+          <span class="run-port">:{{ e.port }}</span>
+        </span>
+        {{ devices(e) }}
+        <span class="run-tags">
+          {%- if e.web %}{% if e.https %}<span class="sec-pill ok">HTTPS</span>{% else %}<span class="sec-pill tip">plain HTTP</span>{% endif %}{% endif %}
+          {%- if e.login %}<span class="sec-pill {{ 'tip' if e.https else 'warn' }}" title="{{ 'A login page' if e.https else 'A login over plain HTTP: the password crosses your network unencrypted' }}">login</span>{% endif %}
+          {%- if e.what %}<span class="src-chip{{ ' guess' if not e.sure }}">{{ 'from ' ~ e.how if e.sure else 'a guess' }}</span>{% endif -%}
+        </span>
+      </div>
+      {% endfor %}
+      {% if g.key == 'unknown' and temporary %}
+      <p class="table-note">And {{ temporary }} temporary port{{ 's' if temporary != 1 }} on phones and computers, which they open and close as apps run.</p>
+      {% endif %}
+    </div>
+  </section>
+{%- endmacro %}
+
+{% if groups %}
+<div class="run-grid">
+  {% for g in groups if g.key != 'unknown' %}{{ group_card(g) }}{% endfor %}
+  {% if certs %}
+  <section class="card calm run-card" aria-labelledby="run-certs">
+    <div class="card-head">
+      <h2 class="card-title" id="run-certs">Certificates</h2>
+      <span class="meta">{{ certs|length }} · what the secure pages show, and when each runs out</span>
+    </div>
+    <div class="run-list">
+      {% for c in certs %}
+      <div class="run-row cert">
+        <span class="run-what">{{ c.cn }} <span class="run-port">:{{ c.port }}</span></span>
+        <span class="run-devs"><a class="run-dev cat-{{ c.device.cat }}" href="{{ c.device.url }}"><span class="cat-badge sm" aria-hidden="true">{{ cat_icon(c.device.cat, 13) }}</span>{{ c.device.name }}</a></span>
+        <span class="run-tags">{% if c.soon %}<span class="sec-pill warn">runs out {{ c.until }}</span>{% else %}<span class="faint small-text">until {{ c.until }}</span>{% endif %}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% for g in groups if g.key == 'unknown' %}{{ group_card(g) }}{% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

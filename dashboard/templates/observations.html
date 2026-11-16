@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Traffic · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import icon with context %}
+{# Up to 500 rows with two icons each: every icon is drawn once here and the rows point at it #}
+{% macro use(id, size) -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#{{ id }}"/></svg>
+{%- endmacro %}
+{# The kinds of device are filled glyphs, not lines #}
+{% macro use_glyph(id, size) -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#{{ id }}"/></svg>
+{%- endmacro %}
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  {% for cat, d in cat_icons.items() %}<symbol id="c-{{ cat }}" viewBox="0 0 24 24"><path fill-rule="evenodd" d="{{ d }}"/></symbol>{% endfor %}
+  {% for k in kinds %}<symbol id="k-{{ k.source }}" viewBox="0 0 24 24"><path d="{{ k.kind[2] }}"/></symbol>{% endfor %}
+</svg>
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Traffic</h1>
+    <p class="facts">What your devices broadcast on the network — who looks for whom, what each one offers (AirPlay,
+      printers, Home Assistant…), and everything else heard. LanWard only listens to these broadcasts; it never
+      probes, and it can't see the actual data your devices send each other.</p>
+  </div>
+</section>
+
+{# One card as "Who talks to whom" (2026-10-27): its head with the period at the top right, the filter and the kinds
+   inside it, then one row per thing heard #}
+<section class="card calm flows-card obs-card" aria-label="Everything heard">
+  <div class="card-head">
+    {% with items=[('Who talks to whom', 'flows'), ('Services announced', 'network_services'), ("What's running", 'running'), ('Everything heard', 'observations')], label='Traffic view' %}{% include "_subnav.html" %}{% endwith %}
+    {% if observations or q %}
+    <form class="search-box" method="get" action="{{ url_for('observations') }}" role="search">
+      <button type="submit" class="search-icon" aria-label="Search what was heard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </button>
+      <input type="hidden" name="range" value="{{ current_range }}">
+      {% if active_source %}<input type="hidden" name="source" value="{{ active_source }}">{% endif %}
+      <input type="text" name="q" value="{{ q }}" aria-label="Search what was heard" placeholder="Search device, MAC, address…">
+      {% if q %}<a class="search-clear" href="{{ url_for('observations', range=current_range, source=active_source or None) }}" title="Clear search" aria-label="Clear search">×</a>{% endif %}
+    </form>
+    {% endif %}
+    {% if q %}<span class="meta">{{ "{:,}".format(shown_of) }} matching “{{ q }}”</span>{% endif %}
+    <nav class="seg-links push-right" aria-label="Period">
+      {% for slug, label, _ in ranges %}
+      <a href="{{ url_for('observations', range=slug, source=active_source or None, q=q or None) }}" class="{{ 'active' if current_range == slug }}"{% if current_range == slug %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+  {% if kinds or q %}
+  <div class="obs-tools">
+    {% if kinds %}
+    <nav class="kind-chips" aria-label="Kind of message">
+      <a href="{{ url_for('observations', range=current_range, q=q or None) }}" class="{{ 'active' if not active_source }}"{% if not active_source %} aria-current="page"{% endif %}>All <span class="n">{{ "{:,}".format(totals.values()|sum) }}</span></a>
+      {% for k in kinds %}
+      <a href="{{ url_for('observations', source=k.source, range=current_range, q=q or None) }}" class="{{ 'active' if active_source == k.source }}" style="--k: {{ k.kind[1] }}" aria-label="{{ k.kind[0] }} — {{ k.tech or k.kind[0] }}, {{ "{:,}".format(k.n) }}"{% if active_source == k.source %} aria-current="page"{% endif %}>{{ icon(k.kind[2], 14) }}<span class="tech">{{ k.tech or k.kind[0] }}</span> <span class="n">{{ "{:,}".format(k.n) }}</span><span class="chip-tip" aria-hidden="true">{{ k.kind[0] }}</span></a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+  </div>
+  {% endif %}
+{% if not observations and q %}
+  <p class="meta">No matches for “{{ q }}”{% if active_source %} in {{ active_source }}{% endif %} in this period.
+    Try a wider period, or <a href="{{ url_for('observations', range=current_range, source=active_source or None) }}">clear the filters</a>.</p>
+{% elif unknown_source %}
+  <p class="meta">Nothing heard of the kind "{{ active_source }}" in this period. The kinds are the buttons above.</p>
+{% elif not observations %}
+  <p class="meta">Nothing heard in this period. The passive monitor runs inside the <code>lanward</code> container;
+    on the machine it runs on, <code>docker logs lanward</code> shows whether it started.</p>
+{% else %}
+  <div class="obs-list" id="obs-list">
+    {% for o in observations %}
+    <div class="obs-row cat-{{ o.cat }}" data-row>
+      <div class="dev-cell">
+        {% set cid = 'c-' ~ (o.cat if o.cat in cat_icons else 'other') %}
+        {% if o.mac %}<a class="cat-badge sm2" href="{{ url_for('host_history', mac=o.mac) }}" aria-label="Open {{ o.name }}">{{ use_glyph(cid, 15) }}</a>
+        {% else %}<span class="cat-badge sm2">{{ use_glyph(cid, 15) }}</span>{% endif %}
+        <div class="who">
+          {% if o.mac %}<a class="name" href="{{ url_for('host_history', mac=o.mac) }}">{{ o.name }}</a>{% else %}<span class="name">{{ o.name }}</span>{% endif %}
+          <span class="sub">{{ o.mac or 'no MAC' }}{% if o.ip %} · {% if o.ip_note %}<span title="{{ o.ip_note }}">{{ o.ip }}*</span>{% else %}{{ o.ip }}{% endif %}{% endif %}</span>
+        </div>
+      </div>
+      <span class="obs-kind"><span class="kind-pill" style="--k: {{ o.kind[1] }}">{{ use('k-' ~ o.source, 13) }}{{ o.kind[0] }}{% if o.tech %}<span class="tech">{{ o.tech }}</span>{% endif %}</span></span>
+      <div class="said-cell">
+        {{ o.said }}
+        {% if o.chips %}<div class="said-chips">{% for c in o.chips %}<span class="chip-port">{{ c }}</span>{% endfor %}</div>{% endif %}
+      </div>
+      <span class="obs-count" title="{{ '{:,.0f}'.format(o.period_est) }} times in the last {{ period_label }} · {{ '{:,}'.format(o.count or 0) }} all time · first {{ o.first_seen|replace('T', ' ') }}, last {{ o.last_seen|replace('T', ' ') }}">
+        <strong>{{ "{:,.0f}".format(o.period_est) }}<span class="unit"> in {{ period_label }}</span></strong>
+        <span>{{ o.last_seen|short_when }}{% if o.since %} · since {{ o.since }}{% endif %}</span>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pages">
+    <span class="pager-count">Showing {{ "{:,}".format(start + 1) }}–{{ "{:,}".format(start + observations|length) }} of {{ "{:,}".format(shown_of) }}</span>
+    <span class="pager-links">
+      {% if page > 1 %}<a href="{{ url_for('observations', range=current_range, source=active_source or None, q=q or None, page=page-1) }}" rel="prev">‹ Previous</a>{% else %}<span class="disabled">‹ Previous</span>{% endif %}
+      <span class="pager-pos">Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a href="{{ url_for('observations', range=current_range, source=active_source or None, q=q or None, page=page+1) }}" rel="next">Next ›</a>{% else %}<span class="disabled">Next ›</span>{% endif %}
+    </span>
+  </nav>
+  {% endif %}
+{% endif %}
+</section>
+
+{% endblock %}

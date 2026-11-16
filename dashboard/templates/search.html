@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Search · LanWard{% endblock %}
+{% block content %}
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Search{% if q %} · "{{ q }}"{% endif %}</h1>
+    <p class="facts">{% if not q %}Use the search bar in the header. It matches your device names, IP, MAC, maker,
+      hostname, open ports, firmware, web page title and TLS certificate name in the scans, plus devices only heard on
+      the network by name, IP, MAC and maker.
+      {%- elif hosts %}{% if capped %}The first <strong>{{ limit }}</strong> matches{% else %}<strong>{{ hosts|length }}</strong> {{ 'match' if hosts|length == 1 else 'matches' }}{% endif %}
+      in the scans, newest scan per device and IP{% if capped %}; type more to narrow it down{% endif %}
+      {%- elif heard or services or traffic_count %}Nothing in the latest scans — but matches turned up elsewhere.
+      {%- else %}No matches for "{{ q }}".{% endif %}</p>
+  </div>
+</section>
+
+{% if q and hosts %}
+<section class="card calm table-card">
+  {% with rows = hosts %}{% include "_hosts_table.html" %}{% endwith %}
+</section>
+{% endif %}
+
+{% if q and heard %}
+<section class="card calm table-card">
+  <div class="card-head">
+    <h2 class="card-title">Heard on the network, never caught by a scan</h2>
+    <span class="meta">Asleep or away at every scan, or a short visit</span>
+  </div>
+  <div class="scroll-x">
+  <table class="wide calm-table">
+    <thead><tr><th>Device</th><th>MAC</th><th>IP</th><th>Maker</th><th>Last heard</th></tr></thead>
+    <tbody>
+    {% for d in heard %}
+      <tr>
+        <td><a href="{{ url_for('host_history', mac=d.mac) }}">{{ d.name or '-' }}</a></td>
+        <td><a href="{{ url_for('host_history', mac=d.mac) }}">{{ d.mac }}</a></td>
+        <td class="dim">{{ d.ip or '-' }}</td>
+        <td>{{ vendor_or_random(d.vendor, d.mac) }}</td>
+        <td class="dim" title="{{ d.last_seen|when }}">{{ humanise_age(d.last_seen) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+{% if q and services %}
+<section class="card calm table-card">
+  <div class="card-head">
+    <h2 class="card-title">Services in traffic</h2>
+    <span class="meta">mDNS services whose name matches "{{ q }}"</span>
+  </div>
+  <div class="svc-matches">
+    {% for s in services %}
+    <a class="svc-match" href="{{ url_for('network_services', q=(s.label or s.service), range='year') }}">
+      <span class="svc-match-name">{{ s.label }}{% if s.label != s.service %} <span class="tech">{{ s.service }}</span>{% endif %}</span>
+      <span class="svc-match-meta">offered by {{ s.offered }} device{{ 's' if s.offered != 1 }}{% if s.wanted %} · looked for by {{ s.wanted }}{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if q and traffic_count %}
+<section class="card calm">
+  <p class="search-traffic"><strong>{{ traffic_count }}</strong> thing{{ 's' if traffic_count != 1 }} heard on the network
+    mentioning "{{ q }}" — across ARP, mDNS, DHCP and more.
+    <a href="{{ url_for('observations', q=q, range='year') }}">Open in Traffic →</a></p>
+</section>
+{% endif %}
+
+{% endblock %}

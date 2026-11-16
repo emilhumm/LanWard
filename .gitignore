@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+
+# Runtime data lives where LanWard runs (data/ or /srv/lanward/data), never in git
+*.db
+*.db-wal
+*.db-shm
+scan-logs/
+.deploy.tar.gz
+
+# Editors / OS / tools
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+
+# Secrets
+.env
+# deploy.sh's target (REMOTE_HOST=user@host)
+.deploy.env
+
+# Runtime data of a plain install (docker compose in this folder)
+data/
+
+.pytest_cache/

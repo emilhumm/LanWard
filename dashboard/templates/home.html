@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}LanWard{% endblock %}
+{% block ambient %}{{ hero.level }}{% endblock %}
+{% block content %}
+{% from "_icons.html" import glyph %}
+
+{# Small line icons and dots, colour only where something needs you #}
+{% macro icon(level) -%}
+{% if level == 'fail' -%}
+<svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+{%- elif level in ('warn', 'tidy') -%}
+<svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16h.01"/></svg>
+{%- elif level == 'ok' -%}
+<svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+{%- else -%}
+<svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>
+{%- endif %}
+{%- endmacro %}
+
+{% macro finding_rows(rows) %}
+<ul class="calm-list">
+  {% for f in rows %}
+  {% set level = 'fail' if f.severity == 'alert' else 'warn' if f.severity == 'warning' else 'tip' %}
+  <li class="note {{ level }}">
+    {{ icon(level) }}
+    <div>
+      <span class="title">{{ f.title }}</span>
+      <span class="detail where"><a href="{{ url_for('host_history', mac=f.mac) if f.mac else url_for('host_in_scan', scan_id=f.scan_id, ip=f.ip) }}">{{ f.name }}</a>
+        · {{ f.ip }}{% if f.from_scan %} · found in {{ f.from_scan|scan_name }}; this one could not check its ports{% endif %}</span>
+      <span class="detail">{{ f.detail }}</span>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro pop_head(id, title, meta) -%}
+<div class="pop-head">
+  <h2>{{ title }}</h2>
+  <button type="button" class="pop-close" popovertarget="pop-{{ id }}" popovertargetaction="hide" aria-label="Close">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+</div>
+{% if meta %}<p class="pop-meta">{{ meta }}</p>{% endif %}
+{%- endmacro %}
+
+{# One item's icon in the line under the status: LanWard's filled glyphs (2026-11-01, "Signature") #}
+{% macro si_icon(name, tone) -%}
+{%- set mark = glyphs.bang if tone in ('warn', 'alert') else None -%}
+{%- if name == 'devices' %}{% set d = cat_icons.computer %}
+{%- elif name == 'alerts' %}{% set d = glyphs.bell %}
+{%- elif name == 'watched' %}{% set d = glyphs.eye %}
+{%- elif name == 'security' %}{% set d = glyphs.shield ~ (mark or glyphs.tick) %}
+{%- else %}{% set d = glyphs.circle ~ (mark or glyphs.info) %}{% endif -%}
+{{ glyph(d, 16, 'ic') }}
+{%- endmacro %}
+
+{# ── Status: one sentence and a line under it, in a card: a small icon and a few words each. The watched devices,
+   the security checks and Worth a look open from their item (2026-10-27, picked on the canvas: "A", then "6") ── #}
+{% set bad = health|rejectattr('status', 'equalto', 'ok')|list %}
+<section class="hero {{ hero.level }}">
+  <span class="hero-glow" aria-hidden="true"></span>
+  <div class="hero-icon">
+    {%- if hero.level == 'ok' %}{{ glyph(glyphs.shield ~ glyphs.tick, 26) }}
+    {%- elif hero.level == 'learn' %}{{ glyph(glyphs.target, 24) }}
+    {%- else %}{{ glyph(glyphs.shield ~ glyphs.bang, 26) }}{% endif -%}
+  </div>
+  <div class="hero-body">
+    <div class="hero-row">
+      <h1>{{ hero.title }}</h1>
+      {% if bad %}
+      <span class="health-line {{ 'fail' if bad|selectattr('status', 'equalto', 'fail')|list else 'warn' }}"
+            title="{% for c in health %}{{ c.name }}: {{ c.value }}{% if not loop.last %} · {% endif %}{% endfor %}">
+        <span class="pulse" aria-hidden="true"></span>LanWard needs a look
+        {%- for c in bad %}<span class="visually-hidden">. {{ c.name }}: {{ c.detail }}</span>{% endfor %}
+      </span>
+      {% endif %}
+    </div>
+    {% if hero.text %}<p class="hero-text">{{ hero.text }}</p>{% endif %}
+    <div class="status-line">
+    {%- for s in status_line %}
+    {%- set cls = 'si' ~ (' ' ~ s.tone if s.tone else '') ~ (' hl' if s.hl else '') %}
+    {%- if s.opens %}<button type="button" class="{{ cls }}" popovertarget="pop-{{ s.opens }}">
+    {%- elif s.url %}<a class="{{ cls }}" href="{{ s.url }}">
+    {%- else %}<span class="{{ cls }}">{% endif %}
+      {{- si_icon(s.icon, s.tone) }}<span class="txt">{{ s.pre }}<strong>{{ s.strong }}</strong>{{ s.post }}</span>
+      {%- if s.opens %}<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>{% endif %}
+    {%- if s.opens %}</button>{% elif s.url %}</a>{% else %}</span>{% endif %}
+    {%- endfor %}
+    </div>
+  </div>
+</section>
+
+{# What the items open: a popup under the item (popups.js), a sheet from the bottom on a phone #}
+{% if insights %}
+<div class="pop" id="pop-look" popover>
+  {{ pop_head('look', 'Worth a look', None) }}
+  <ul class="calm-list">
+    {% for i in insights %}
+    <li class="note {{ i.level }}">
+      {{ icon(i.level) }}
+      <div>
+        <span class="title">{{ i.title }}</span>
+        {% if i.lines %}<ul class="note-items">
+          {% for a in i.lines %}<li><span class="sev-dot {{ a.severity }}" aria-hidden="true"></span><span class="t"><span class="visually-hidden">{{ a.severity }}: </span>{{ a.title|tidy }}</span><span class="when">{{ a.when }}</span></li>{% endfor %}
+        </ul>{% endif %}
+        {% if i.detail %}<span class="detail">{{ i.detail }}</span>{% endif %}
+        {% if i.action %}<a class="action" href="{{ i.action[1] }}">{{ i.action[0] }}</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="pop" id="pop-watched" popover>
+  {{ pop_head('watched', 'Watched devices', 'A push to your phone when one goes offline.' if watched else None) }}
+  <ul class="calm-list">
+    {% for w in watched %}
+    <li class="watch-row">
+      <span class="pulse {{ 'down' if w.view == 'down' else 'up' if w.view == 'up' else 'wait' }}" aria-hidden="true"></span>
+      <div class="grow">
+        <a href="{{ url_for('host_history', mac=w.mac) }}">{{ w.label }}</a>
+        {% if w.uptime_short %}<span class="detail" title="{{ w.uptime_text }}">{{ w.uptime_short }}</span>{% endif %}
+      </div>
+      {% if w.view == 'up' %}<span class="state">Online</span>
+      {% elif w.view == 'down' %}<span class="state down">Offline</span>
+      {% elif w.state == 'down' %}<span class="state" title="An alert goes out if it stays quiet for 10 minutes">Not answering</span>
+      {% else %}<span class="state">Checking…</span>{% endif %}
+      <span class="since">{{ humanise_age(w.since)|replace(' ago', '') if w.since else '-' }}</span>
+    </li>
+    {% else %}
+    <li class="empty">Nothing is watched yet. Open a device and tick "alert me when it goes offline".</li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if checked %}
+{% set serious = findings|rejectattr('severity', 'equalto', 'info')|list %}
+{% set tips = findings|selectattr('severity', 'equalto', 'info')|list %}
+{% set meta -%}
+From {{ checked|scan_name }}{% if last_scan and last_scan.id != checked %} ({{ last_scan.started_at|scan_name }} is still being checked){% endif %}
+{%- if serious %} · {{ serious|length }} to look at{% endif %}
+{%- if tips %} · {{ tips|length }} tip{{ 's' if tips|length != 1 }}, checked and fine{% endif %}
+{%- endset %}
+<div class="pop wide" id="pop-security" popover>
+  {{ pop_head('security', 'Security checks', meta) }}
+  {% if serious %}{{ finding_rows(serious) }}{% endif %}
+  {% set eol_tips = [] %}{% set fine_tips = [] %}
+  {% for f in tips %}{% if f.id and f.id.startswith('eol:') %}{% set _ = eol_tips.append(f) %}{% else %}{% set _ = fine_tips.append(f) %}{% endif %}{% endfor %}
+  {% if eol_tips %}<h3 class="pop-sub">Updates from the maker</h3>{{ finding_rows(eol_tips) }}{% endif %}
+  {% if fine_tips %}{% if serious or eol_tips %}<h3 class="pop-sub">Checked and fine</h3>{% endif %}{{ finding_rows(fine_tips) }}{% endif %}
+  {% if not findings %}
+  <p class="meta">Nothing found. Checks: open telnet, FTP, VNC, Docker API and databases, shared folders, Shelly
+    passwords and updates, Frigate's open port, logins over plain HTTP, expiring certificates, UPnP on the router.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if gateway.others %}
+<section class="card warn-card">
+  <h2 class="card-title">Another device answers for your router</h2>
+  <p class="meta">Normally {{ gateway.ip }} is <code>{{ gateway.mac }}</code>. Also answering in the last 15 minutes:</p>
+  <table class="wide"><tbody>
+  {% for mac in gateway.others %}
+  <tr><td><code>{{ mac }}</code></td>
+    <td>
+      <form method="post" action="{{ url_for('gateway_accept') }}" style="margin:0"
+            data-confirm="Only do this if you replaced your router. Accept {{ mac }} as the router?"
+            data-confirm-title="New router?" data-confirm-label="Yes, accept it" data-confirm-variant="primary">
+        <input type="hidden" name="mac" value="{{ mac }}">
+        <button class="small" type="submit">This is my new router</button>
+      </form>
+    </td></tr>
+  {% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+{# ── Network activity: one chart, devices or chatter, against what is usual for each hour ── #}
+<section class="card activity" id="activity">
+  <div class="act-head">
+    <h2 class="card-title">Network activity</h2>
+    <div class="seg" role="group" aria-label="What to show" data-switch="metric" hidden>
+      {% for m in act.metrics %}<button type="button" data-value="{{ m.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ m.label }}</button>{% endfor %}
+    </div>
+    {% set lh = act.metrics[0].headline %}
+    {% if lh.pill and lh.pill[1] == 'learn' %}<span class="act-pill learn"{% if lh.note %} title="{{ lh.note }}"{% endif %}><span class="pulse" aria-hidden="true"></span>{{ lh.pill[0] }}</span>{% endif %}
+    <div class="seg push-right" role="group" aria-label="Time range" data-switch="range" hidden>
+      {% for r in act.ranges %}<button type="button" data-value="{{ r.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ r.label }}</button>{% endfor %}
+    </div>
+  </div>
+
+  {% for m in act.metrics %}{% set h = m.headline %}
+  <div class="act-headline" data-metric="{{ m.key }}"{% if not loop.first %} hidden{% endif %}>
+    <span class="value">{{ h.value }}</span>
+    <span class="unit">{{ h.unit }}</span>
+  </div>
+  {% endfor %}
+
+  {% for v in act.views %}{% set c = v.chart %}
+  <figure class="act-view" data-metric="{{ v.metric }}" data-range="{{ v.range }}"{% if not loop.first %} hidden{% endif %}>
+    <div class="act-plot" style="height: {{ c.height }}px">
+      <svg viewBox="0 0 1000 {{ c.height }}" preserveAspectRatio="none" role="img"
+           aria-label="{{ v.caption }}{% if c.low is not none %}: between {{ '{:,}'.format(c.low) }} and {{ '{:,}'.format(c.high) }}{% if c.flags %}, {{ c.flags|length }} {{ v.per }}{{ 's' if c.flags|length != 1 }} far from the usual{% endif %}{% else %}: nothing counted yet{% endif %}">
+        <defs><linearGradient id="act-fill-{{ loop.index }}" x1="0" y1="0" x2="0" y2="1"><stop class="act-stop" offset="0" stop-color="#7CC8FF" stop-opacity="0.3"/><stop class="act-stop" offset="1" stop-color="#7CC8FF" stop-opacity="0"/></linearGradient>
+          <linearGradient id="act-usual-fill-{{ loop.index }}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A78BFA" stop-opacity="0.16"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></linearGradient></defs>
+        {% for g in c.grid %}<line class="act-grid" x1="0" y1="{{ g.y }}" x2="1000" y2="{{ g.y }}"/>{% endfor %}
+        {% if c.usual_area %}<path d="{{ c.usual_area }}" fill="url(#act-usual-fill-{{ loop.index }})"/>{% endif %}
+        {% if c.usual %}<path class="act-usual" d="{{ c.usual }}"/>{% endif %}
+        {% if c.area %}<path d="{{ c.area }}" fill="url(#act-fill-{{ loop.index }})"/>{% endif %}
+        {% if c.line %}<path class="act-line" d="{{ c.line }}"/>{% endif %}
+        {% if c.estimate %}<path class="act-line est" d="{{ c.estimate }}"/>{% endif %}
+        {% for h in c.hits %}<rect class="act-hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="{{ c.height }}" data-cx="{{ h.cx }}"{% if h.cy is not none %} data-cy="{{ h.cy }}"{% endif %} data-tip="{{ h.tip }}"></rect>{% endfor %}
+      </svg>
+      {% for g in c.grid %}<span class="act-gl" style="top: {{ g.y }}px" aria-hidden="true">{{ g.label }}</span>{% endfor %}
+      {% for f in c.flags %}<span class="act-ring" style="left: {{ f.left }}%; top: {{ f.top }}px" aria-hidden="true"></span>{% endfor %}
+      {% if c.now %}<span class="act-now" style="left: {{ c.now.left }}%; top: {{ c.now.top }}px" aria-hidden="true"></span>{% endif %}
+      {% if c.empty %}<span class="act-empty">{{ v.empty }}</span>{% endif %}
+    </div>
+    <div class="act-x" aria-hidden="true">{% for l in v.xlabels %}<span{% if l.end %} class="end"{% endif %} style="left: {{ l.left }}%">{{ l.text }}</span>{% endfor %}</div>
+    <figcaption class="act-legend">
+      <span><span class="key line" aria-hidden="true"></span>Actual</span>
+      {% if c.usual %}<span><span class="key usual" aria-hidden="true"></span>Usual</span>{% endif %}
+      {% if c.flags %}<span><span class="key ring" aria-hidden="true"></span>Far from the usual</span>{% endif %}
+      {% if c.estimate %}<span><span class="key line est" aria-hidden="true"></span>{{ v.now_label }}</span>{% endif %}
+      {% if v.began %}<span>Counting began {{ v.began }}</span>{% endif %}
+    </figcaption>
+  </figure>
+  {% endfor %}
+
+  {% if act.unusual %}
+  <div class="act-unusual">
+    {% for u in act.unusual %}
+    <p>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F5A86B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-6 4 3 6-8"/><path d="M14 6h4v4"/></svg>
+      <span>{% for d in u.devices %}<a href="{{ d.url }}">{{ d.name }}</a>{% if not loop.last %}{{ ' and ' if loop.revindex == 2 else ', ' }}{% endif %}{% endfor %} {{ u.why }}</span>
+    </p>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{# ── Devices without a name: a form, so it stays on the page ── #}
+{% if unknown %}
+<section class="card calm" id="name-devices">
+  <div class="card-head">
+    <h2 class="card-title">Name new devices</h2>
+    <span class="meta">Seen this week without a name. A name marks a device as yours; watch sends a push when it goes offline.</span>
+  </div>
+  <ul class="calm-list">
+    {% for d in unknown %}
+    <li>
+      <form method="post" action="{{ url_for('label_set') }}" class="name-row">
+        <div class="who">
+          <span class="title">{{ d.hint or d.hostname or d.vendor or ('Private MAC' if d.randomized else 'Unknown') }}</span>
+          <span class="detail where"><a href="{{ url_for('host_history', mac=d.mac) }}">{{ d.mac }}</a>
+            · {{ d.vendor or ('private MAC' if d.randomized else 'unknown maker') }} · {{ d.ip or 'no address' }}
+            · <span title="{{ d.last_seen|when }}">last seen {{ humanise_age(d.last_seen) }}</span></span>
+        </div>
+        <input type="hidden" name="mac" value="{{ d.mac }}">
+        <input type="hidden" name="redirect_to" value="{{ url_for('home') }}">
+        <label class="visually-hidden" for="name-{{ loop.index }}">Name for {{ d.mac }}</label>
+        <input id="name-{{ loop.index }}" type="text" name="label" placeholder="e.g. Kids' iPad" value="{{ d.hint or '' }}" required>
+        <label class="check"><input type="checkbox" name="watch"> watch</label>
+        <button class="small" type="submit">Save</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% endblock %}

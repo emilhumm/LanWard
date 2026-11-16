@@ -1,0 +1,29 @@
+# /etc/systemd/system/lanward.service — brings the compose stack up at boot.
+# Type=oneshot + RemainAfterExit: `systemctl is-active` stays "active" even if
+# the container stops later. Check the container itself: docker ps -a.
+#
+# Wants= (not Requires=) docker: with Requires, `systemctl stop docker` also
+# stopped this unit, whose ExecStop removes the container, and nothing made it
+# again when docker started. Now a docker stop/start or restart leaves the
+# container in place and its restart policy (unless-stopped) brings it back.
+
+[Unit]
+Description=LanWard (docker compose stack)
+Wants=docker.service network-online.target
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/lanward
+# network-online.target can be reached before DHCP has written /etc/resolv.conf (Debian
+# with `allow-hotplug` and ifupdown-wait-online disabled). Docker copies that file when it
+# creates the container, so an empty one means no DNS inside LanWard until the next
+# restart (2026-11-02: 43 hours, every CISA download failed). Wait for a nameserver, up
+# to 60 s, then start anyway. The real fix on such a box: enable ifupdown-wait-online.
+ExecStartPre=/bin/sh -c 'n=60; until grep -q "^nameserver" /etc/resolv.conf; do n=$$((n-1)); [ "$$n" -gt 0 ] || { echo "no nameserver in /etc/resolv.conf after 60 s, starting anyway"; break; }; sleep 1; done'
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target

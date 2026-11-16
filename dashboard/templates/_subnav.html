@@ -1,0 +1,7 @@
+{# The views inside one tab. Include with `items` = [(text, endpoint), ...] and `label`. A ?range= picked in one
+   view (Traffic's period) goes along to the others. #}
+<nav class="sub-nav" aria-label="{{ label }}">
+  {% for text, endpoint in items %}
+  <a href="{{ url_for(endpoint, range=request.args.get('range')) }}" class="{{ 'active' if request.endpoint == endpoint }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ text }}</a>
+  {% endfor %}
+</nav>

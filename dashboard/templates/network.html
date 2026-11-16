@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Network · LanWard{% endblock %}
+{% block content %}
+
+{# The map around the router (2026-10-27, picked on the canvas: "E"): the router in the middle with a port light
+   per group, every card leaning towards it, and a line from it to every card in the card's colour, with right
+   angles and a port dot (netmap.js draws them from where the cards are). #}
+{# One glyph per group in a glossy tile of the group's colour (2026-11-01, "Signature"): the kind of device, a name
+   tag for "Not named yet", a house for "Nobody home" #}
+{% from "_icons.html" import glyph, cat_icon with context %}
+{% macro badge(c) -%}
+<span class="badge" aria-hidden="true">
+{%- if c.kind == 'unnamed' %}{{ glyph(glyphs.tag, 19) }}
+{%- elif c.kind == 'ghosts' %}{{ glyph(glyphs.house, 19) }}
+{%- else %}{{ cat_icon(c.cat, 19) }}{% endif -%}
+</span>
+{%- endmacro %}
+
+<div class="net-map">
+  {% for c in cells %}
+  <div class="slot pos-{{ loop.index0 }}{% if c.kind == 'router' %} hub-slot{% endif %}">
+    {% if c.kind == 'router' %}
+    <div class="hub {{ c.status }}">
+      <span class="hub-icon" aria-hidden="true">{{ glyph(glyphs.router, 24) }}</span>
+      {% if c.url %}<a class="name" href="{{ c.url }}">{{ c.name }}</a>{% else %}<span class="name">{{ c.name }}</span>{% endif %}
+      <span class="ip">{{ c.ip }}{% if c.risky %} <span class="flag" title="Has a security finding: see Security checks on the Overview">!</span>{% endif %}</span>
+    </div>
+    {% else %}
+    {% set tone = 'tidy' if c.kind == 'unnamed' and c['items'] else 'quiet' if c.kind == 'ghosts' and c['items'] else '' %}
+    {# A group with devices is lit in its colour; it glows only when something in it needs you #}
+    {% set needs = tone == 'tidy' or c['items']|selectattr('risky')|list %}
+    <section class="card calm net-group cat-{{ c.cat }} {{ tone or ('done' if c.kind in ('unnamed', 'ghosts') else '') }}{{ ' has' if c['items'] }}{{ ' needs' if needs }}" aria-labelledby="group-{{ loop.index }}">
+      <h2 id="group-{{ loop.index }}">
+        {{ badge(c) }}
+        <span class="label">{{ c.label }}{% if c.note %}<span class="note-text">{{ c.note }}</span>{% endif %}</span>
+        {% if c['items'] %}<span class="count">{{ c['items']|length }}</span>{% endif %}
+      </h2>
+      {% if c['items'] %}
+      <ul class="net-devices">
+        {% for d in (c['items'][:6] if c.kind == 'ghosts' else c['items']) %}
+        <li><a href="{{ d.url }}" title="{{ d.title }}">
+          <span class="name">{{ d.name }}</span>
+          {% if d.risky %}<span class="flag" title="Has a security finding">check</span>{% endif %}
+          <span class="ip">{{ d.ip }}</span>
+          {% if c.kind != 'ghosts' %}<span class="visually-hidden">{{ 'heard in the last 10 minutes' if d.live else 'not heard in the last 10 minutes' }}</span>{% endif %}
+        </a></li>
+        {% endfor %}
+      </ul>
+      {% if c.kind == 'ghosts' and c['items']|length > 6 %}<a class="action" href="{{ url_for('flows') }}">See who asks →</a>{% endif %}
+      {% elif c.kind == 'group' %}
+      <p class="net-empty">No devices in this group yet.</p>
+      {% endif %}
+      {% if c.action %}<a class="action" href="{{ c.action[1] }}">{{ c.action[0] }} →</a>{% endif %}
+    </section>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

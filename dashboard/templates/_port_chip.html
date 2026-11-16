@@ -1,0 +1,8 @@
+{# One open port as a chip (2026-10-27): its number, then the title of the web page it shows or its name; a web page
+   is a link to it. `c` is one of decorate()'s port_chips. #}
+{% macro port_chip(c) -%}
+{% if c.url %}<a class="chip-port web{{ ' named' if c.name }}" href="{{ c.url }}" target="_blank" rel="noopener" title="Port {{ c.port }}{{ ': ' ~ c.title if c.title }} · opens a web page">
+{%- else %}<span class="chip-port{{ ' named' if c.name }}" title="Port {{ c.port }}{{ ': ' ~ c.label if c.name }}">{% endif -%}
+<span class="pn">{{ c.port }}</span>{% if c.name %}<span class="pl">{{ c.name }}</span>{% endif -%}
+{% if c.url %}</a>{% else %}</span>{% endif %}
+{%- endmacro %}

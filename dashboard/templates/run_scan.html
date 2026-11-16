@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Run scan · LanWard{% endblock %}
+{% block content %}
+
+<h2>Run a scan</h2>
+
+{% if running %}
+<p class="meta">A scan is already running. <a href="{{ url_for('scan_status') }}">See status →</a></p>
+{% else %}
+{% if error %}<p class="meta warn-text" role="alert">{{ error }}</p>{% endif %}
+<form method="post" action="{{ url_for('run_scan') }}" class="form-card">
+  <p class="meta">Scan every device on <strong>{{ subnet or 'your network' }}</strong>
+    {% if not subnet %}(not found yet — set it in <a href="{{ url_for('settings') }}#network">Settings → Network</a>){% endif %}.</p>
+  <button type="submit"{% if not subnet %} disabled{% endif %}>Start scan</button>
+</form>
+<p class="meta">Scans run by themselves {{ every }}. One takes about 5 minutes: it checks
+  {{ n_ports }} home-relevant ports per device, slowly on purpose, then runs the security checks.
+  To scan a different network, change it in <a href="{{ url_for('settings') }}#network">Settings → Network</a>.</p>
+{% endif %}
+
+{% endblock %}

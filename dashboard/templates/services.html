@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Services · Traffic · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import icon with context %}
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Traffic</h1>
+    <p class="facts">What your devices broadcast on the network — who looks for whom, what each one offers (AirPlay,
+      printers, Home Assistant…), and everything else heard. LanWard only listens to these broadcasts; it never
+      probes, and it can't see the actual data your devices send each other.</p>
+  </div>
+</section>
+
+{# One row per service (no box each): what it is, who offers it, who looks for it #}
+<section class="card calm flows-card" aria-label="Services on the network">
+  <div class="card-head">
+    {% with items=[('Who talks to whom', 'flows'), ('Services announced', 'network_services'), ("What's running", 'running'), ('Everything heard', 'observations')], label='Traffic view' %}{% include "_subnav.html" %}{% endwith %}
+    <nav class="seg-links push-right" aria-label="Period">
+      {% for slug, label, _ in ranges %}
+      <a href="{{ url_for('network_services', range=slug, q=q or none) }}" class="{{ 'active' if current_range == slug }}"{% if current_range == slug %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+  {% if q %}
+  <p class="filter-note">Showing services matching <strong>"{{ q }}"</strong>.
+    <a href="{{ url_for('network_services', range=current_range) }}">Show all services →</a></p>
+  {% endif %}
+  {% if not services %}
+  <p class="meta">{% if q %}No services match "{{ q }}" in this period — try a longer period.{% else %}No mDNS announcements in this period.{% endif %}</p>
+  {% else %}
+  <div class="service-list">
+    {% for s in services %}
+    <div class="service-row" style="--k: {{ s.look[0] }}">
+      <div class="service-head">
+        <span class="service-icon" aria-hidden="true">{{ icon(s.look[1]) }}</span>
+        <span class="who">
+          <span class="name">{{ s.label or s.service }}{% if s.label %} <span class="tech">{{ s.service }}</span>{% endif %}</span>
+          {% if s.what %}<span class="sub">{{ s.what }}</span>{% endif %}
+        </span>
+      </div>
+      <div class="service-offered">
+        {% for d in s.offered[:5] %}<a class="dev-chip cat-{{ d.cat }}" href="{{ url_for('host_history', mac=d.mac) }}" title="{{ d.ip or d.mac }}"><span class="dot-cat" aria-hidden="true"></span>{{ d.name or d.vendor or d.mac }}</a>{% endfor %}
+        {%- if s.offered|length > 5 %}<span class="dev-chip more" title="{{ s.offered[5:]|map(attribute='name')|join(', ') }}">+{{ s.offered|length - 5 }} more</span>{% endif %}
+      </div>
+      <span class="service-wanted">{% if s.wanted %}Looked for by {% for d in s.wanted[:3] %}{{ d.name or d.vendor or d.mac }}{% if not loop.last %}, {% endif %}{% endfor %}{% if s.wanted|length > 3 %} and {{ s.wanted|length - 3 }} more{% endif %}{% else %}Nobody looked for it in this period{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

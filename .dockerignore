@@ -1,0 +1,4 @@
+# The image needs nothing from disk: source and data are bind-mounted at
+# runtime. Without this file the build context is all of /srv/lanward,
+# scanner.db included.
+*

@@ -1,0 +1,17 @@
+[Unit]
+Description=LanWard DB backup to a mounted share
+RequiresMountsFor=/mnt/router-backup
+# Best-effort: run even if the mount unit is in a transient state on boot
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/lanward-backup.sh
+# Runs as the account that owns /srv/lanward, so the script can read the data
+# without sudo; mount /mnt/router-backup with that uid (fstab). install.sh
+# fills in the account.
+User=@LANWARD_USER@
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=10min

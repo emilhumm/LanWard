@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Traffic · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import icon, cat_icon with context %}
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Traffic</h1>
+    <p class="facts">What your devices broadcast on the network — who looks for whom, what each one offers (AirPlay,
+      printers, Home Assistant…), and everything else heard. LanWard only listens to these broadcasts; it never
+      probes, and it can't see the actual data your devices send each other.</p>
+  </div>
+</section>
+
+{% macro who(mac, name, vendor, cat, sub=None, odd=False) -%}
+<a class="flow-dev cat-{{ cat }}" href="{{ url_for('host_history', mac=mac) if mac else '#' }}"{% if not mac %} aria-disabled="true"{% endif %}>
+  <span class="cat-badge sm2">{{ cat_icon(cat, 15) }}</span>
+  <span class="who">
+    <span class="name">{{ name or vendor or mac or 'unknown' }}</span>
+    {% if sub %}<span class="sub{{ ' odd' if odd }}">{{ sub }}</span>{% endif %}
+  </span>
+</a>
+{%- endmacro %}
+
+<section class="card calm flows-card" aria-label="Who is asking for whom">
+  <div class="card-head">
+    {% with items=[('Who talks to whom', 'flows'), ('Services announced', 'network_services'), ("What's running", 'running'), ('Everything heard', 'observations')], label='Traffic view' %}{% include "_subnav.html" %}{% endwith %}
+    <nav class="seg-links push-right" aria-label="Period">
+      {% for slug, label, _ in ranges %}
+      <a href="{{ url_for('flows', range=slug) }}" class="{{ 'active' if current_range == slug }}"{% if current_range == slug %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+  {% if not arp_flows %}
+  <p class="meta">No ARP requests in this period.</p>
+  {% else %}
+  <div class="flow-list">
+    {% for r in arp_flows %}
+    <div class="flow-row" data-details="fd-{{ loop.index }}">
+      {{ who(r.mac, r.asker_name, r.vendor, r.asker_cat, r.asker_ip) }}
+      <svg class="flow-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="asks for"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      {{ who(r.target_mac, r.target_name, r.target_vendor, r.target_cat, r.target_ip ~ (' · ' ~ r.note if r.note else ''), r.odd) }}
+      <span class="flow-bar" title="How often it asks, against the busiest pair. A device keeps asking when nobody answers, so a long bar often means it is trying to reach something that is off, asleep or gone."><span style="width: {{ r.bar }}%"></span></span>
+      <button type="button" class="flow-rate" aria-expanded="false" aria-controls="fd-{{ loop.index }}" title="{{ r.detail }}">
+        <svg class="flow-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        <span class="flow-rate-n"><strong>{% if r.period_est < 1 %}&lt;1{% else %}{{ "{:,.0f}".format(r.period_est) }}{% endif %}</strong>
+        <span>in {{ period_label }}</span></span>
+      </button>
+    </div>
+    <div class="flow-detail" id="fd-{{ loop.index }}" hidden>
+      <span>{{ r.detail }}</span>
+      {% if r.why %}<span class="why">{{ r.why }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pages">
+    <span class="pager-count">Showing {{ "{:,}".format(start + 1) }}–{{ "{:,}".format(start + arp_flows|length) }} of {{ "{:,}".format(arp_total) }}</span>
+    <span class="pager-links">
+      {% if page > 1 %}<a href="{{ url_for('flows', range=current_range, page=page-1) }}" rel="prev">‹ Previous</a>{% else %}<span class="disabled">‹ Previous</span>{% endif %}
+      <span class="pager-pos">Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a href="{{ url_for('flows', range=current_range, page=page+1) }}" rel="next">Next ›</a>{% else %}<span class="disabled">Next ›</span>{% endif %}
+    </span>
+  </nav>
+  {% endif %}
+  {% endif %}
+</section>
+
+{% endblock %}

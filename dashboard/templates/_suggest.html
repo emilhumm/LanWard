@@ -1,0 +1,66 @@
+{# Header search typeahead, served by /search/suggest for suggest.js. Groups: scanned devices, devices only
+   heard on the network, and Traffic (matching services + a jump into the matching activity). The very first
+   row is pre-selected; suggest.js handles ↑/↓ and Enter across every row. #}
+{% from "_icons.html" import cat_icon, icon with context %}
+{% set ns = namespace(first=true) %}
+{% if hosts or heard or services or traffic_count %}
+
+{% if hosts %}
+<div class="sg-head">Devices · {{ hosts|length }}{{ '+' if more_devices }} match{{ 'es' if hosts|length != 1 }}</div>
+{% for h in hosts %}
+<a class="sg-item cat-{{ h.category }}{{ ' sel' if ns.first }}" href="{{ h.url }}" role="option" tabindex="-1">{% set ns.first = false %}
+  <span class="sg-badge">{{ cat_icon(h.category, 15) }}</span>
+  <span class="sg-text">
+    <span class="sg-name">{{ h.label or h.hostname or h.identity or h.ip or h.mac }}</span>
+    <span class="sg-sub">{{ h.ip or h.mac }}{% if h.vendor or (h.mac and mac_is_randomized(h.mac)) %} · {{ vendor_or_random(h.vendor, h.mac) }}{% endif %}</span>
+  </span>
+  <span class="sg-kind">{{ h.category|cat_label }}</span>
+</a>
+{% endfor %}
+{% endif %}
+
+{% if heard %}
+<div class="sg-head{{ ' div' if hosts }}">Also heard · never scanned</div>
+{% for d in heard %}
+<a class="sg-item cat-{{ d.category }}{{ ' sel' if ns.first }}" href="{{ d.url }}" role="option" tabindex="-1">{% set ns.first = false %}
+  <span class="sg-badge">{{ cat_icon(d.category, 15) }}</span>
+  <span class="sg-text">
+    <span class="sg-name">{{ d.name or vendor_or_random(d.vendor, d.mac) }}</span>
+    <span class="sg-sub">{{ d.ip or d.mac }} · heard {{ humanise_age(d.last_seen) }}</span>
+  </span>
+  <span class="sg-kind">Heard</span>
+</a>
+{% endfor %}
+{% endif %}
+
+{% if services or traffic_count %}
+<div class="sg-head{{ ' div' if hosts or heard }}">In traffic</div>
+{% for s in services %}
+<a class="sg-item sg-svc{{ ' sel' if ns.first }}" href="{{ url_for('network_services', q=(s.label or s.service), range='year') }}" role="option" tabindex="-1">{% set ns.first = false %}
+  <span class="sg-badge">{{ icon('M12 12h.01M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8', 15) }}</span>
+  <span class="sg-text">
+    <span class="sg-name">{{ s.label }}</span>
+    <span class="sg-sub">offered by {{ s.offered }} device{{ 's' if s.offered != 1 }}{% if s.wanted %} · looked for by {{ s.wanted }}{% endif %}</span>
+  </span>
+  <span class="sg-kind">Service →</span>
+</a>
+{% endfor %}
+{% if traffic_count %}
+<a class="sg-item sg-traffic{{ ' sel' if ns.first }}" href="{{ url_for('observations', q=q, range='year') }}" role="option" tabindex="-1">{% set ns.first = false %}
+  <span class="sg-badge">{{ icon('M3 12h4l3 7 4-14 3 7h4', 15) }}</span>
+  <span class="sg-text">
+    <span class="sg-name">{{ traffic_count }} thing{{ 's' if traffic_count != 1 }} heard mentioning “{{ q }}”</span>
+    <span class="sg-sub">across ARP, mDNS, DHCP and more</span>
+  </span>
+  <span class="sg-kind">Open →</span>
+</a>
+{% endif %}
+{% endif %}
+
+<a class="sg-foot" href="{{ url_for('search', q=q) }}">
+  <span><span class="kbd">↵</span> open · <span class="kbd">↑</span><span class="kbd">↓</span> move</span>
+  <span class="sg-all">See all matches →</span>
+</a>
+{% else %}
+<div class="sg-empty">Nothing matches "{{ q }}". <a href="{{ url_for('search', q=q) }}">Search everything →</a></div>
+{% endif %}

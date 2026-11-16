@@ -1,0 +1,48 @@
+# LanWard: one container (2026-10-06; replaced lanward-dashboard, -passive
+# and -scheduler). From a git clone: cp .env.example .env, then
+#   docker compose up -d
+# and open http://<this machine>:8080 (README.md: Install).
+#
+# docker/entrypoint.py runs the dashboard on $DASHBOARD_PORT, the passive
+# monitor (tshark), the watcher (new devices, router, offline devices), a
+# scan every 6 hours, a nightly backup and the weekly clean-up.
+#
+# Host networking because ARP sweeps, packet capture and arping need the real
+# interface; NET_RAW/NET_ADMIN for the same reason. With host networking the
+# container uses the host's DNS, so no `dns:` block (Docker rejects one here).
+#
+# The code is bind-mounted read-only from LANWARD_CODE (default: this folder,
+# so `git pull` + `docker compose restart` updates it; the image only changes
+# with the Dockerfile). Data lives in LANWARD_DATA_DIR (default ./data).
+
+services:
+  lanward:
+    build: .
+    image: lanward-app:latest
+    container_name: lanward
+    restart: unless-stopped
+    init: true                          # PID 1 that reaps the scan/arping/tshark children
+    stop_grace_period: 30s              # entrypoint gives its children 15 s; Docker's default 10 s cut that short
+    network_mode: host
+    cap_add: [NET_RAW, NET_ADMIN]
+    mem_limit: 1g                       # tshark is recycled at 400 MB; this is the backstop
+    env_file:
+      - path: .env
+        required: false
+    environment:                        # everything else in .env reaches the container through env_file
+      PORT: "${DASHBOARD_PORT:-8080}"
+      # "-", not ":-": SCAN_HOURS= (empty) in .env means no scheduled scans, not the default
+      SCAN_HOURS: "${SCAN_HOURS-0,6,12,18}"
+      LANWARD_DATA: /data
+    volumes:
+      - ${LANWARD_CODE:-.}:/app:ro
+      - ${LANWARD_DATA_DIR:-./data}:/data
+      - /etc/localtime:/etc/localtime:ro  # the host's time zone (TZ in .env overrides it)
+    working_dir: /app
+    command: ["python3", "docker/entrypoint.py"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${PORT}/healthz >/dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

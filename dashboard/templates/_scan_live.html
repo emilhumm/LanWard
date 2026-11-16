@@ -1,0 +1,9 @@
+{# Live scan progress inside the Run scan popup. While running it polls itself every 2 s (htmx replaces
+   this whole element with a fresh copy from /scan/progress); when the scan ends there is no trigger, so
+   it stops and shows the finish line. #}
+<div id="scan-live"{% if running %} hx-get="{{ url_for('scan_progress') }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <pre class="scan-log modal-log">{{ (log_text or '(starting…)')[-1400:] }}</pre>
+  {% if not running %}
+  <p class="modal-done">Scan finished. <a href="{{ url_for('devices') }}">See the devices →</a></p>
+  {% endif %}
+</div>

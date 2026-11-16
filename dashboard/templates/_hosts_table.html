@@ -1,0 +1,75 @@
+{# Devices of one scan (2026-10-27, "a polished table"). Include with `rows`; `show_activity` adds the last 24 hours
+   as a small area chart with when it was last heard (rows need status, last_heard, spark) instead of the MAC
+   column; `presorted` keeps the rows' order instead of by IP. The name is edited in place. #}
+{% from "_icons.html" import cat_icon with context %}
+{% from "_port_chip.html" import port_chip %}
+<div class="scroll-x">
+<table class="hosts calm-table dev-table">
+<thead>
+<tr>
+  <th>Device</th>
+  <th>{{ 'Last 24 hours' if show_activity else 'MAC' }}</th>
+  <th>Open ports</th>
+  <th title="Host name, else what its TLS certificate, UPnP description, web page or SSH banner says">Calls itself</th>
+  <th>Security</th>
+</tr>
+</thead>
+<tbody>
+{% for h in (rows if presorted else rows|sort_ip) %}
+{% set url = url_for('host_history', mac=h.mac) if h.mac else url_for('host_in_scan', scan_id=h.scan_id, ip=h.ip) if h.scan_id else None %}
+<tr class="cat-{{ h.category }}" data-search="{{ h.port_chips|map(attribute='port')|join(' ') }} {{ h.mac or '' }} {{ h.category|cat_label }}">
+  <td>
+    <div class="dev-cell">
+      {% if url %}<a class="cat-badge" href="{{ url }}" title="{{ h.category|cat_label }}" aria-label="Open {{ h.label or h.ip }}">{{ cat_icon(h.category) }}</a>
+      {% else %}<span class="cat-badge" title="{{ h.category|cat_label }}">{{ cat_icon(h.category) }}</span>{% endif %}
+      <div class="who">
+        {% if h.mac %}
+        {% if h.label %}<span class="name-view" data-name-view>
+          <a class="name" href="{{ url }}">{{ h.label }}</a>
+          <button type="button" class="name-edit" data-name-edit aria-label="Rename {{ h.label }}" title="Rename">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+          </button>
+        </span>{% endif %}
+        <form method="post" action="{{ url_for('label_set') }}" class="inline-label" data-name-form{% if h.label %} hidden{% endif %}>
+          <input type="hidden" name="mac" value="{{ h.mac }}">
+          <input type="hidden" name="redirect_to" value="{{ request.full_path }}">
+          <input type="hidden" name="note" value="{{ h.label_note }}">
+          {% if h.label_watch %}<input type="hidden" name="watch" value="on">{% endif %}
+          <input type="text" name="label" value="{{ h.label or '' }}"
+                 class="inline-label-input name-input" placeholder="Give it a name…" aria-label="Name for {{ h.ip }}" title="Type a name, Enter to save"
+                 onchange="if (this.value.trim() || !this.defaultValue || confirm('Remove the name? The device becomes unknown again.')) this.form.submit(); else this.value = this.defaultValue;">
+        </form>
+        {% else %}<span class="name">{{ h.hostname or h.ip }}</span>{% endif %}
+        <span class="sub">{% if url %}<a href="{{ url }}">{{ h.ip }}</a>{% else %}{{ h.ip }}{% endif %} · {{ vendor_or_random(h.vendor, h.mac) }}</span>
+      </div>
+    </div>
+  </td>
+  {% if show_activity %}
+  <td data-label="Last 24 hours" title="{{ ('last heard ' ~ (h.last_heard|when)) if h.last_heard else 'never heard' }}">
+    <div class="act-cell">
+      {% if h.spark %}<svg class="spark-area" viewBox="0 0 96 28" preserveAspectRatio="none" aria-hidden="true"><title>How much it was heard over the last 24 hours</title><path class="fill" d="{{ h.spark.area }}"/><path class="stroke" d="{{ h.spark.line }}"/></svg>
+      {% else %}<span class="spark-none" aria-hidden="true"></span>{% endif %}
+      <span class="heard"><span class="live{{ ' on' if h.status in ('live', 'recent') }}" aria-hidden="true" title="{{ 'Heard in the last hour' if h.status in ('live', 'recent') else 'Quiet — often asleep, not broken' }}"></span>{{ humanise_age(h.last_heard) if h.last_heard else 'never' }}</span>
+    </div>
+  </td>
+  {% else %}
+  <td class="dim small-text" data-label="MAC">{{ h.mac or '-' }}</td>
+  {% endif %}
+  <td data-label="Open ports">{% if h.ports_unknown %}<span class="dim" title="The port check did not finish for this device in this scan">not checked</span>
+    {%- elif h.port_chips %}{% for c in h.port_chips %}{{ port_chip(c) }}{% endfor %}
+    {%- elif h.ports %}{% for p in h.ports.split(',') %}<span class="chip-port">{{ p }}</span>{% endfor %}
+    {%- else %}<span class="dim">-</span>{% endif %}</td>
+  <td class="calls-cell" data-label="Calls itself" title="{{ h.hostname or h.identity or '' }}">{{ h.hostname or h.identity or '-' }}</td>
+  <td data-label="Security">
+    {% set serious = h.findings_list|rejectattr('severity', 'equalto', 'info')|list %}
+    {% set tips = h.findings_list|selectattr('severity', 'equalto', 'info')|list %}
+    {% if serious %}<span class="sec-pill {{ 'alert' if serious|selectattr('severity', 'equalto', 'alert')|list else 'warn' }}" title="{{ serious|map(attribute='title')|join('; ') }}">{{ serious[0].title if serious|length == 1 else serious|length ~ ' to look at' }}</span>
+    {% elif tips %}<span class="sec-pill tip" title="{{ tips|map(attribute='title')|join('; ') }}">{{ tips|length }} tip{{ 's' if tips|length != 1 }}</span>
+    {% elif h.ports_unknown %}<span class="dim">-</span>
+    {% else %}<span class="sec-pill ok" title="Checked and fine — nothing to look at">All good</span>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>

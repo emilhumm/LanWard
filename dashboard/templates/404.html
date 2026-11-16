@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Not found · LanWard{% endblock %}
+{% block content %}
+<section class="card calm notfound">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+  <h1>That page isn’t here</h1>
+  <p class="meta">The device or page you asked for doesn’t exist. If it was a device, it may have been dropped after
+    the data-retention window, or the link is out of date.</p>
+  <a class="btn-link" href="{{ url_for('home') }}">Back to the overview</a>
+</section>
+{% endblock %}

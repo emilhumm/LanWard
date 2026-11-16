@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% block title %}Settings · LanWard{% endblock %}
+{% block content %}
+
+{% macro src(name) %}<span class="src" title="Where this value comes from now">{{ sources[name] }}</span>{% endmacro %}
+{% macro err(field) %}{% if errors[field] %}<span class="field-error" role="alert">{{ errors[field] }}</span>{% endif %}{% endmacro %}
+{% macro url_row(name, what, d, n) %}<div class="url-row">
+  <label class="visually-hidden" for="{{ name }}-{{ n }}">{{ what }} {{ n }}</label>
+  <input id="{{ name }}-{{ n }}" class="mono" type="text" name="{{ name }}" value="{{ d.url }}" spellcheck="false">
+  <span class="delivery">{% if d.waiting %}<span class="dot sm fail"></span>{{ d.waiting }} waiting{% elif d.ok %}<span class="dot sm ok"></span>took one {{ humanise_age(d.ok) }}{% else %}<span class="dot sm quiet"></span>nothing sent yet{% endif %}</span>
+  <button type="button" class="secondary" data-remove>Remove</button>
+</div>{% endmacro %}
+{% macro new_row(name, what, hint) %}<div class="url-row">
+  <input class="mono" type="text" name="{{ name }}" aria-label="{{ what }}" placeholder="{{ hint }}" spellcheck="false">
+  <button type="button" class="secondary" data-remove>Remove</button>
+</div>{% endmacro %}
+{% set hook_hint = 'http://homeassistant.local:8123/api/webhook/lanward-…' %}
+{% set push_hint = 'ntfy://my-lanward-topic   or   tgram://bot-token/chat-id' %}
+
+<div class="settings-head">
+  <div>
+    <h2>Settings</h2>
+    <p class="meta">Changes apply right away and override <code>.env</code> — except the network interface (Advanced), which needs a restart.</p>
+  </div>
+</div>
+{% if errors %}<p class="notice warn" role="alert">Nothing was saved: {{ errors|length }} {{ 'field needs' if errors|length == 1 else 'fields need' }} a look, marked below.</p>{% endif %}
+
+{# ── Sections down the left, the chosen one's settings on the right (settings.js). One group shows at a
+   time; without JavaScript every section shows and the sidebar is just a list down the page. ── #}
+<div class="settings-layout">
+  <nav class="set-side" aria-label="Settings sections">
+    <button type="button" class="set-tab" data-tab="alerts">Alerts</button>
+    <button type="button" class="set-tab" data-tab="scans">Scans &amp; security</button>
+    <button type="button" class="set-tab" data-tab="access">Access</button>
+    <button type="button" class="set-tab" data-tab="data">Data</button>
+    <button type="button" class="set-tab" data-tab="appearance">Appearance</button>
+    <button type="button" class="set-tab" data-tab="advanced">Advanced</button>
+  </nav>
+
+  <div class="set-main">
+<form id="settings-form" method="post" action="{{ url_for('settings') }}" novalidate>
+<section class="card settings-card" id="appearance" data-tab="appearance">
+  <h2 class="card-title">Appearance</h2>
+  <p class="meta">How LanWard looks on this device. “System” follows your device’s light or dark setting. This is saved in
+    your browser, so it can be different on each device, and it takes effect the moment you choose.</p>
+  <div class="theme-seg" role="group" aria-label="Theme">
+    <button type="button" class="theme-opt" data-theme-opt="light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg>Light</button>
+    <button type="button" class="theme-opt" data-theme-opt="dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Dark</button>
+    <button type="button" class="theme-opt" data-theme-opt="system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>System</button>
+  </div>
+</section>
+
+{# ── Alerts ── #}
+<section class="card settings-card" id="alerts-out" data-tab="alerts">
+  <div class="card-head">
+    <h2 class="card-title">Where alerts go</h2>
+    <span class="meta">Use one, several or none. Leave them empty and alerts only appear on the dashboard.</span>
+    <button type="submit" class="secondary push-right" form="test-form">Send a test alert</button>
+  </div>
+  {% if test %}
+  <div class="test-result" role="status">
+    <span class="dim">Test alert {{ test.at|when }}:</span>
+    {% for r in test.results %}
+    <span class="chip {{ 'ok' if not r.error else 'alert' }}" title="{{ r.error or 'delivered' }}">{{ r.name }}: {{ 'sent' if not r.error else 'failed' }}</span>
+    {% else %}<span class="dim">nowhere to send it yet; add a destination below and save first.</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  <fieldset class="set-group">
+    <legend>Webhooks <span class="dim">· the alert as JSON to a URL (Home Assistant, Node-RED, n8n...)</span> {{ src('WEBHOOK_URLS') }}</legend>
+    <div class="url-rows" data-rows="webhook">
+      {% for d in hooks %}{{ url_row('webhook', 'Webhook', d, loop.index) }}{% else %}{{ new_row('webhook', 'New webhook', hook_hint) }}{% endfor %}
+    </div>
+    <template id="webhook-row">{{ new_row('webhook', 'New webhook', hook_hint) }}</template>
+    <button type="button" class="add-row" data-add="webhook">+ Add a webhook</button>
+    {{ err('webhook') }}
+  </fieldset>
+
+  <fieldset class="set-group">
+    <legend>Phone pushes <span class="dim">· no other system needed: ntfy, Telegram, Pushover, email...</span> {{ src('NOTIFY_URLS') }}</legend>
+    <div class="url-rows" data-rows="push">
+      {% for d in pushes %}{{ url_row('push', 'Push address', d, loop.index) }}{% else %}{{ new_row('push', 'New push address', push_hint) }}{% endfor %}
+    </div>
+    <template id="push-row">{{ new_row('push', 'New push address', push_hint) }}</template>
+    <button type="button" class="add-row" data-add="push">+ Add a phone push</button>
+    <span class="meta">Addresses as <a href="https://github.com/caronc/apprise/wiki" rel="noopener" target="_blank">Apprise</a>
+      writes them, e.g. <code>ntfy://my-lanward-topic</code> for the free ntfy app.</span>
+    {{ err('push') }}
+  </fieldset>
+
+  {# Every alert always shows on the dashboard; these switches decide which ones are also sent to the
+     destinations above. Icons for each info alert (Warnings has its own, inline below). #}
+  {% set ia_icons = {
+    'info_firmware': '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+    'info_ghost': '<path d="M5 20V9a7 7 0 0 1 14 0v11l-2.3-1.6L14.3 20 12 18.4 9.7 20 7.3 18.4 5 20z"/><path d="M9.5 10h.01M14.5 10h.01"/>',
+    'info_scanning': '<circle cx="11" cy="11" r="8"/><path d="M11 11l5-2.5"/><circle cx="11" cy="11" r="1.4" fill="currentColor"/>',
+    'info_online': '<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>'
+  } %}
+  <h3 class="set-grp">Which ones get sent out</h3>
+  <p class="set-grp-note"><strong>Serious problems</strong> — like a device impersonating your router — are always sent.
+    Switch on any others you also want sent out:</p>
+  <div class="info-alerts">
+    <div class="ia-row">
+      <span class="ia-ic warn" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+      <span class="ia-who"><span class="ia-nm">Warnings</span><span class="ia-sub">New devices, a watched device going offline, two devices on one address, an unknown device scanning</span></span>
+      <label class="ia-switch">
+        <span class="ia-swlabel">Send</span>
+        <input type="checkbox" name="send_warnings"{% if send_warnings %} checked{% endif %}>
+        <span class="ia-track"><span class="ia-knob"></span></span>
+      </label>
+    </div>
+    {% for a in info_alerts %}
+    <div class="ia-row">
+      <span class="ia-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{{ ia_icons[a.field]|safe }}</svg></span>
+      <span class="ia-who"><span class="ia-nm">{{ a.name }}</span><span class="ia-sub">{{ a.sub }}</span></span>
+      <label class="ia-switch">
+        <span class="ia-swlabel">Send</span>
+        <input type="checkbox" name="{{ a.field }}"{% if a.on %} checked{% endif %}>
+        <span class="ia-track"><span class="ia-knob"></span></span>
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3 class="set-grp">Watched devices</h3>
+  <div class="num-fields">
+    <label><span class="lbl">Say a watched device is offline after {{ src('WATCH_OFFLINE_MINUTES') }}</span>
+      <span><input type="number" name="offline_minutes" min="2" max="1440" value="{{ offline_minutes }}"> minutes</span>{{ err('offline_minutes') }}
+      <span class="meta">For the devices you tick to watch, on the Overview.</span></label>
+  </div>
+</section>
+
+{# ── Scans & security ── #}
+<section class="card settings-card" id="scans" data-tab="scans">
+  <h2 class="card-title">Scans and security</h2>
+  <fieldset class="set-group">
+    <legend>Scan at {{ src('SCAN_HOURS') }}</legend>
+    <div class="hour-chips">
+      {% for h in hours %}
+      <label><input type="checkbox" name="scan_hour" value="{{ h.h }}"{% if h.on %} checked{% endif %}><span>{{ '%02d'|format(h.h) }}</span></label>
+      {% endfor %}
+    </div>
+    <span class="meta">{{ schedule }}. None ticked: only when you press Run scan.</span>
+  </fieldset>
+  <div class="num-fields">
+    <label><span class="lbl">Check every port of each device {{ src('FULL_PORT_CHECK_DAYS') }}</span>
+      <span>every <input type="number" name="full_days" min="0" max="30" value="{{ full_days }}"> days</span>{{ err('full_days') }}
+      <span class="meta">All 65,535, spread over the scans so each takes only a share of the devices; a port a device
+        never had open before is alerted. The usual ports and those found before are checked at every scan. 0: never.</span></label>
+  </div>
+  <fieldset class="set-group">
+    <legend>Known flaws and end-of-life {{ src('SUPPORT_CHECK') }}</legend>
+    <label class="check-row"><input type="checkbox" name="support_check"{% if support_check %} checked{% endif %}>
+      <span>From the model each device announces, warn when the maker no longer updates it, and push an alert when
+        a device is on <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" rel="noopener" target="_blank">CISA's list</a>
+        of flaws seen in real attacks. Downloads that one public list a day; nothing about your devices leaves your
+        network. Devices that don't announce a model aren't checked.</span></label>
+  </fieldset>
+</section>
+
+{# ── Data and backups ── #}
+<section class="card settings-card" id="data" data-tab="data">
+  <h2 class="card-title">Data and backups</h2>
+  <div class="num-fields">
+    <label><span class="lbl">Keep scan history {{ src('RETAIN_SCAN_DAYS') }}</span>
+      <span><input type="number" name="retain_days" min="30" max="3650" value="{{ retain_days }}"> days</span>{{ err('retain_days') }}</label>
+    <label><span class="lbl">Keep nightly backups {{ src('BACKUP_KEEP_DAYS') }}</span>
+      <span><input type="number" name="backup_days" min="0" max="365" value="{{ backup_days }}"> days</span>{{ err('backup_days') }}
+      <span class="meta">In data/backups at 03:30{% if last_backup %}; newest {{ last_backup }}{% endif %}. 0: none.</span></label>
+  </div>
+</section>
+
+{# ── Access: login (the API key card is after the form, same tab) ── #}
+<section class="card settings-card" id="login" data-tab="access">
+  <h2 class="card-title">Login and access</h2>
+  <p class="meta">Dashboard password: {{ password_from }}.</p>
+  <fieldset class="set-group">
+    <legend>Password</legend>
+    <label class="check-row">
+      <input type="checkbox" name="require_password"{% if require_password and not login_locked_off %} checked{% endif %}{% if login_locked_off %} disabled{% endif %}>
+      <span>Ask for a password to open the dashboard.
+        {% if login_locked_off %}<strong>Turned off in <code>.env</code> (DASHBOARD_PASSWORD=off)</strong>, so this can't be changed here.
+        {% else %}Turn this off only on a network you fully trust — anyone who can reach this page could then open it.{% endif %}</span></label>
+  </fieldset>
+  <div class="num-fields">
+    <label><span class="lbl">New password</span>
+      <input type="password" name="new_password" autocomplete="new-password" placeholder="{{ 'turned off in .env' if login_locked_off else 'leave empty to keep it' }}"{% if login_locked_off %} disabled{% endif %}>{{ err('new_password') }}</label>
+    <label><span class="lbl">The same again</span>
+      <input type="password" name="new_password2" autocomplete="new-password"{% if login_locked_off %} disabled{% endif %}></label>
+    <label><span class="lbl">Log out after {{ src('AUTO_LOGOUT_MINUTES') }}</span>
+      <span><input type="number" name="auto_logout" min="0" max="1440" value="{{ auto_logout }}"> minutes idle</span>{{ err('auto_logout') }}
+      <span class="meta">0: stay logged in until you log out.</span></label>
+  </div>
+</section>
+
+{# ── Advanced: network readout, then the rarely-needed bits ── #}
+<section class="card settings-card" id="network" data-tab="advanced">
+  <h2 class="card-title">Network</h2>
+  <p class="meta">LanWard finds the network by itself. Change these only if it picked the wrong card — e.g. a machine
+    with several. <strong>Takes effect when LanWard next restarts</strong>, since it listens on the interface from
+    the moment it starts.</p>
+  <div class="num-fields">
+    <label class="wide"><span class="lbl">Network interface <span class="src">{{ iface_src }}</span></span>
+      <input type="text" class="mono" name="iface" value="{{ iface_value }}" placeholder="{{ running_iface }} — found by itself" spellcheck="false">{{ err('iface') }}
+      <span class="meta">The network card LanWard listens on (e.g. <code>eth0</code>, <code>eno1</code>). Leave empty to let it choose.</span></label>
+    <label class="wide"><span class="lbl">Subnet <span class="src">{{ subnet_src }}</span></span>
+      <input type="text" class="mono" name="subnet" value="{{ subnet_value }}" placeholder="{{ running_subnet }} — found by itself" spellcheck="false">{{ err('subnet') }}
+      <span class="meta">The address range it scans, like <code>192.168.1.0/24</code>. Leave empty to use the range on the interface.</span></label>
+  </div>
+  {% if net_restart %}
+  <p class="notice warn" role="status">Saved, but not in use yet. Restart LanWard to switch to this network:
+    on the machine that runs it <code>docker compose restart lanward</code> (or run your deploy).</p>
+  {% endif %}
+  <div class="net-rows">
+    {% for label, val, where in net_readonly %}
+    <div class="net-row"><span class="dim">{{ label }}</span><span class="mono">{{ val }}</span><span class="src">{{ where }}</span></div>
+    {% endfor %}
+  </div>
+  <p class="meta">The router is learned from traffic; the dashboard address and port come from <code>.env</code>
+    (<code>DASHBOARD_URL</code>, <code>PORT</code>).</p>
+</section>
+
+<section class="card settings-card" id="advanced" data-tab="advanced">
+  <h2 class="card-title">Rarely needed</h2>
+  <div class="num-fields">
+    <label class="wide"><span class="lbl">Other DHCP servers that are meant to be there {{ src('DHCP_SERVERS_OK') }}</span>
+      <input type="text" class="mono" name="dhcp_ok" value="{{ dhcp_ok }}" placeholder="e.g. a Pi-hole's MAC address" spellcheck="false">{{ err('dhcp_ok') }}
+      <span class="meta">MAC addresses, separated by commas. Any other DHCP server than the router raises an alert.</span></label>
+    <label class="wide"><span class="lbl">Devices allowed to scan the network {{ src('SCANNERS_OK') }}</span>
+      <input type="text" class="mono" name="scanners_ok" value="{{ scanners_ok }}" placeholder="e.g. your laptop with a network-scanner app" spellcheck="false">{{ err('scanners_ok') }}
+      <span class="meta">MAC addresses, separated by commas. Any other device that asks for 50 or more addresses within
+        10 minutes raises an alert: a warning for an unnamed device, a quiet note for a named one.</span></label>
+  </div>
+  {% if learning_until %}
+  <p class="meta">Learning the network until {{ learning_until|when }}: devices seen until then raise no "new device" alert.
+    <button type="submit" class="secondary" form="learning-form">Stop learning now</button></p>
+  {% endif %}
+</section>
+</form>
+
+{# ── Access: reading LanWard's data (own forms, so it sits outside the settings form) ── #}
+<section class="card settings-card" id="api" data-tab="access">
+  <div class="card-head">
+    <h2 class="card-title">Get LanWard's data</h2>
+    <span class="meta">For Home Assistant, Node-RED, Grafana, a script: anything that can fetch a URL.</span>
+  </div>
+  <div class="key-row">
+    <label for="api-key" class="strong">API key</label>
+    <input id="api-key" class="mono key-box" type="{{ 'text' if new_key else 'password' }}" value="{{ key }}" readonly>
+    <button type="button" class="secondary" data-show="api-key">{{ 'Hide' if new_key else 'Show' }}</button>
+    <button type="button" class="secondary" data-copy="api-key">Copy</button>
+    <button type="submit" class="secondary" form="newkey-form">New key</button>
+  </div>
+  {% if new_key %}<p class="notice ok" role="status">A new key is made; the old one no longer works.</p>{% endif %}
+  <p class="meta">Read-only: the key fetches the report, it cannot change anything. Send it as the header
+    <code>Authorization: Bearer &lt;key&gt;</code>.</p>
+  <div class="num-fields">
+    <label class="wide"><span class="lbl">Read without the key, from these IPs {{ src('STATUS_ALLOW') }}</span>
+      <input type="text" class="mono" name="status_allow" value="{{ status_allow }}" spellcheck="false" form="settings-form">{{ err('status_allow') }}
+      <span class="meta">IP addresses, separated by commas, e.g. Home Assistant's. This machine always may. Saved with the other settings.</span></label>
+  </div>
+  <div class="endpoint-list">
+    {% for path, what in endpoints %}
+    <div class="endpoint"><span class="method">GET</span><code>{{ path }}</code><span class="dim">{{ what }}</span></div>
+    {% endfor %}
+  </div>
+  <details class="examples">
+    <summary>Examples: curl, Home Assistant, the JSON a webhook gets</summary>
+    <div class="example-grid">
+      <div>
+        <span class="strong">Try it</span>
+        <pre>curl -H "Authorization: Bearer &lt;key&gt;" \
+     {{ dashboard_url }}/api/status</pre>
+      </div>
+      <div>
+        <span class="strong">Home Assistant <span class="dim">(configuration.yaml)</span></span>
+        <pre>rest:
+  - resource: {{ dashboard_url }}/api/status
+    headers:
+      Authorization: Bearer &lt;key&gt;
+    scan_interval: 60
+    sensor:
+      - name: LanWard
+        value_template: "{{ '{{' }} value_json.summary {{ '}}' }}"
+        json_attributes: [level, alerts_open, findings, watched]</pre>
+      </div>
+      <div>
+        <span class="strong">What a webhook receives</span>
+        <pre>{"severity": "warning", "kind": "offline",
+ "title": "NAS is offline",
+ "message": "- NAS (192.168.1.20) has not answered for 10 minutes.",
+ "time": "2026-10-27T14:05:44", "url": "{{ dashboard_url }}/alerts"}</pre>
+      </div>
+    </div>
+  </details>
+</section>
+
+{# ── Data: download everything in one place (own links, so it sits outside the settings form) ── #}
+<section class="card settings-card" id="export" data-tab="data">
+  <div class="card-head">
+    <h2 class="card-title">Export your data</h2>
+    <span class="meta">Download a CSV. Nothing leaves your network — the file is built on the box.</span>
+  </div>
+  <label class="export-range-row"><span class="lbl">Period for the Traffic exports</span>
+    <select id="export-range" aria-label="Period for the Traffic exports">
+      <option value="day">24 hours</option>
+      <option value="week" selected>7 days</option>
+      <option value="month">30 days</option>
+      <option value="year">365 days</option>
+    </select>
+  </label>
+  <ul class="export-list">
+    {% if export_scan %}
+    <li><span class="lbl">Devices <span class="meta">— the latest scan</span></span>
+      <a class="export-dl" href="{{ url_for('scan_export_csv', scan_id=export_scan) }}">Download CSV</a></li>
+    {% endif %}
+    <li><span class="lbl">Ports and services <span class="meta">— every port each device has had open, what it is and how
+      LanWard knows, open now, first and last seen</span></span>
+      <a class="export-dl" href="{{ url_for('running', format='csv') }}">Download CSV</a></li>
+    <li><span class="lbl">Traffic · who looks for whom</span>
+      <a class="export-dl export-link" data-export="{{ url_for('flows') }}" href="{{ url_for('flows', format='csv', range='week') }}">Download CSV</a></li>
+    <li><span class="lbl">Traffic · services announced</span>
+      <a class="export-dl export-link" data-export="{{ url_for('network_services') }}" href="{{ url_for('network_services', format='csv', range='week') }}">Download CSV</a></li>
+    <li><span class="lbl">Traffic · everything heard</span>
+      <a class="export-dl export-link" data-export="{{ url_for('observations') }}" href="{{ url_for('observations', format='csv', range='week') }}">Download CSV</a></li>
+  </ul>
+</section>
+
+<div class="set-savebar">
+  {% if saved %}<span class="set-saved" data-saved>✓ Saved</span>{% endif %}
+  <span class="set-dirty" data-dirty hidden><span class="dot" aria-hidden="true"></span>Unsaved changes</span>
+  <button type="submit" form="settings-form" class="set-bar-save">Save changes</button>
+</div>
+  </div>{# .set-main #}
+</div>{# .settings-layout #}
+
+<form id="test-form" method="post" action="{{ url_for('settings_test') }}"></form>
+<form id="newkey-form" method="post" action="{{ url_for('settings_new_key') }}"
+      data-confirm="Make a new API key? Anything that uses the old one (Home Assistant, scripts) stops working until you give it the new one."
+      data-confirm-title="New API key?" data-confirm-label="Make new key" data-confirm-variant="danger"></form>
+<form id="learning-form" method="post" action="{{ url_for('settings_end_learning') }}"></form>
+{% endblock %}

@@ -1,0 +1,64 @@
+{# What one scan found on a device (a decorated hosts row from _with_scan_facts). Include with
+   `host`; set `with_findings` to show the findings here too. #}
+{% from "_port_chip.html" import port_chip %}
+{% if with_findings and host.findings_list %}
+<section class="card">
+  <h2 class="card-title">Security findings</h2>
+  <table class="wide"><tbody>
+  {% for f in host.findings_list %}
+  <tr><td style="width:96px"><span class="sev-tag {{ f.severity }}">{{ f.severity }}</span></td>
+    <td><strong>{{ f.title }}</strong><div class="finding-detail">{{ f.detail }}</div>{% if f.from_scan %}<div class="faint small-text">Found in {{ f.from_scan|scan_name }}; this scan could not check the device's ports.</div>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Network</h2>
+  <table class="kv">
+  <tr><th>IP</th><td class="mono">{{ host.ip or '-' }}</td></tr>
+  <tr><th>Open ports</th><td>{% if host.ports_unknown %}<span class="dim">not checked: the port check did not finish in this scan</span>
+    {%- elif host.port_chips %}{% for c in host.port_chips %}{{ port_chip(c) }}{% endfor %}
+    {%- else %}{{ host.ports or 'none of the ones checked' }}{% endif %}</td></tr>
+  {% if host.port_check %}<tr><th>Every port checked</th><td>{{ host.port_check }}</td></tr>{% endif %}
+  <tr><th>Firmware</th><td>{{ host.firmware or '-' }}</td></tr>
+  <tr><th>SSH banner</th><td>{{ host.ssh_banner or '-' }}</td></tr>
+  {% if (host.tls_cert_cn or '').strip('*. ') %}
+  <tr><th>TLS certificate</th><td>{{ host.tls_cert_cn }} · issued by {{ host.tls_cert_issuer or '?' }} · valid until {{ host.tls_cert_not_after or '?' }}</td></tr>
+  {% endif %}
+  {% if host.ipv6_list %}<tr><th>IPv6 link-local</th><td class="small">{{ host.ipv6_list|join(', ') }}</td></tr>{% endif %}
+  </table>
+</section>
+
+{% if host.web_parsed %}
+<section class="card">
+  <h2 class="card-title">Web pages</h2>
+  <table class="wide calm-table">
+  <thead><tr><th>Port</th><th>Status</th><th>Title</th><th>Server</th><th>Login</th></tr></thead>
+  <tbody>
+  {% for port, w in host.web_parsed.items() %}
+  <tr><td>{{ port }}{% if w.tls %} (https){% endif %}</td><td>{{ w.status }}{% if w.redirect %} → {{ w.redirect }}{% endif %}</td>
+    <td><a href="{{ 'https' if w.tls else 'http' }}://{{ host.ip }}:{{ port }}/" target="_blank" rel="noopener">{{ w.title or 'open' }}</a></td><td>{{ w.server or '-' }}</td><td>{{ w.login or '-' }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+{% if host.mdns_list %}
+<section class="card">
+  <h2 class="card-title">mDNS services in this scan</h2>
+  <ul class="pills">{% for s in host.mdns_list %}<li>{{ s }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if host.upnp_parsed %}
+<section class="card">
+  <h2 class="card-title">UPnP / SSDP</h2>
+  <table class="kv">
+  {% for k, v in host.upnp_parsed.items() if k != 'st' %}
+  <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+  {% endfor %}
+  {% if host.upnp_parsed.st %}<tr><th>services</th><td class="small">{{ host.upnp_parsed.st|join(', ') }}</td></tr>{% endif %}
+  </table>
+</section>
+{% endif %}

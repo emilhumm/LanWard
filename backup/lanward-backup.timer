@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily LanWard DB backup (02:30, between scans)
+
+[Timer]
+# Fires once a day, 02:30-02:35. Scans run at 00, 06, 12 and 18 (SCAN_HOURS),
+# so the backup does not compete with one writing rows.
+OnCalendar=02:30
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

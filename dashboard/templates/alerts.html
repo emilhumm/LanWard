@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Alerts · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import icon with context %}
+
+<section class="page-head">
+  <div class="grow">
+    <h1>Alerts</h1>
+    <p class="facts">
+      {%- if unack_count %}<span class="warn"><strong>{{ unack_count }}</strong> {{ 'warning or alert' if unack_count == 1 else 'warnings and alerts' }} not yet acknowledged</span>
+        {%- if unack_info %} <span class="sep" aria-hidden="true">·</span> <strong>{{ unack_info }}</strong> info{% endif %}
+      {%- elif unack_info %}all warnings acknowledged <span class="sep" aria-hidden="true">·</span> <strong>{{ unack_info }}</strong> info not yet
+      {%- else %}<span class="all-clear"><span class="pulse" aria-hidden="true"></span>All clear</span> everything acknowledged{% endif %}
+      {%- if last_ack_at %}, last {{ last_ack_at|short_when }}{% endif %}
+      <span class="sep" aria-hidden="true">·</span>
+      {% if show_info %}<a class="link" href="{{ url_for('alerts', kind=kind, range=current_range) }}">Hide acknowledged info</a>
+      {% else %}<a class="link" href="{{ url_for('alerts', all=1, kind=kind, range=current_range) }}">Show everything</a>{% endif %}
+      {% if not show_info %}<span class="toggle-hint">Acknowledged warnings stay here; acknowledged info is hidden until you show everything.</span>{% endif %}
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('alert_ack_all') }}" class="head-action">
+    {% if show_info %}<input type="hidden" name="all" value="1">{% endif %}
+    {% if kind %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+    <input type="hidden" name="range" value="{{ current_range }}">
+    <button class="secondary" type="submit"{% if unack_count + unack_info == 0 %} disabled{% endif %}>Acknowledge all{% if kind %} {{ (filters|selectattr('key', 'equalto', kind)|first).label|lower }}{% endif %}</button>
+  </form>
+</section>
+
+{# The kinds on the left, the period on the right (as on Traffic); alerts nobody has acknowledged show whatever
+   the period #}
+<div class="alert-tools">
+  {% if filters %}
+  <nav class="kind-chips" aria-label="Kind of alert">
+    <a href="{{ url_for('alerts', all=1 if show_info else None, range=current_range) }}" class="{{ 'active' if not kind }}"{% if not kind %} aria-current="page"{% endif %}>All <span class="n">{{ total }}</span></a>
+    {% for f in filters %}
+    <a href="{{ url_for('alerts', kind=f.key, all=1 if show_info else None, range=current_range) }}" class="{{ 'active' if kind == f.key }}" style="--k: {{ f.color }}"{% if kind == f.key %} aria-current="page"{% endif %}>{{ icon(f.icon, 14) }}{{ f.label }} <span class="n">{{ f.n }}</span></a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+  <nav class="seg-links push-right" aria-label="Period">
+    {% for slug, label, _ in ranges %}
+    <a href="{{ url_for('alerts', range=slug, kind=kind, all=1 if show_info else None) }}" class="{{ 'active' if current_range == slug }}"{% if current_range == slug %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+</div>
+
+{% for day in days %}
+<section class="tl-day" aria-label="{{ day.label }}">
+  <h2>{{ day.label }}</h2>
+  <div class="card calm tl-card">
+    {% for a in day['items'] %}
+    <article class="tl-item{% if not a.acknowledged %} unseen{% else %} acked{% endif %}" style="--k: {{ a.color }}">
+      <span class="tl-bubble" aria-hidden="true">{{ icon(a.icon) }}</span>
+      <div class="tl-body">
+        <div class="tl-head">
+          <span class="title"><span class="visually-hidden">{{ 'Action needed' if a.severity == 'alert' else a.severity|capitalize }}: </span>{{ a.title|tidy }}</span>
+          {% if a.severity == 'alert' %}<span class="tl-tag alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M12 8v5M12 16h.01"/></svg>Action needed</span>{% elif a.severity == 'warning' %}<span class="tl-tag warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>Warning</span>{% else %}<span class="tl-tag info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></svg>Info</span>{% endif %}
+          <span class="when" title="{{ a.created_at|when }}">{{ a.time }}{% if a.scan_id %} · from <a href="{{ url_for('devices', scan=a.scan_id) }}">{{ a.scan_id|scan_name }}</a>{% endif %}</span>
+          {% if not a.acknowledged %}
+          <form method="post" action="{{ url_for('alert_ack', alert_id=a.id) }}" class="ack">
+            {% if show_info %}<input type="hidden" name="all" value="1">{% endif %}
+            <input type="hidden" name="range" value="{{ current_range }}">
+            <button class="small" type="submit">Acknowledge</button>
+          </form>
+          {% else %}
+          <span class="tl-ack"{% if a.acknowledged_at %} title="Acknowledged {{ a.acknowledged_at|short_when }}"{% endif %}>✓ Acknowledged</span>
+          {% endif %}
+        </div>
+        {% if a.head %}<div class="tl-text">{{ a.head }}</div>{% endif %}
+        {% if a.more %}
+        <details class="tl-more">
+          <summary>{{ a.more_lines }} more line{{ 's' if a.more_lines != 1 }}</summary>
+          <div class="tl-text">{{ a.more[:4000] }}{% if a.more|length > 4000 %}
+… (cut){% endif %}</div>
+        </details>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<section class="card calm"><p class="meta">{{ 'No alerts of this kind in this period.' if kind else 'No alerts in this period.' }}</p></section>
+{% endfor %}
+
+{% endblock %}

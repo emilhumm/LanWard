@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}{{ intel.friendly_name or mac }} · LanWard{% endblock %}
+{% block content %}
+
+{# ── Who it is and whether it is here ── #}
+<h2>{{ host.label or intel.friendly_name or mac }} <span class="small">{{ mac }}</span></h2>
+<div class="device-facts">
+  {% set st = intel.status %}
+  <span class="chip {{ 'ok' if st in ('live', 'recent') else 'info' if st == 'today' else 'warn' if st in ('week', 'stale') else 'info' }}">
+    <span class="dot sm {{ 'ok' if st in ('live', 'recent') else 'quiet' }}"></span>
+    {% if st == 'live' %}Online now{% elif st == 'recent' %}Heard in the last hour{% elif intel.last_seen %}Quiet{% else %}Never heard{% endif %}
+  </span>
+  {% if intel.last_seen %}<span class="dim">last heard {{ humanise_age(intel.last_seen) }}{% if heard.first %} · first heard {{ humanise_age(heard.first) }}{% endif %}</span>{% endif %}
+  <span class="chip info cat-{{ host.category }}"><span class="swatch"></span> {{ host.category|cat_label }}</span>
+  {% if host.ip %}<span class="mono">{{ host.ip }}</span>{% endif %}
+  {% if host.vendor %}<span class="dim">{{ host.vendor }}</span>{% endif %}
+  {% if intel.is_random_mac %}<span class="chip warn">private MAC</span>{% endif %}
+  {% if watch %}<span class="chip {{ 'ok' if watch.view == 'up' else 'alert' if watch.view == 'down' else 'info' }}">watched ·
+    {% if watch.view == 'up' %}online{% elif watch.view == 'down' %}offline{% elif watch.state == 'down' %}not answering{% else %}checking{% endif %}
+    {% if watch.since and watch.state %}{{ humanise_age(watch.since)|replace(' ago', '') }}{% endif %}</span>{% endif %}
+</div>
+
+{% if host.findings_list %}
+<section class="card">
+  <h2 class="card-title">Security findings <span class="small">{% if host.scan_id == latest_scan_id %}latest scan{% else %}from {{ host.started_at|scan_name }}: the latest scan did not find this device{% endif %}</span></h2>
+  <table class="wide"><tbody>
+  {% for f in host.findings_list %}
+  <tr><td style="width:96px"><span class="sev-tag {{ f.severity }}">{{ f.severity }}</span></td>
+    <td><strong>{{ f.title }}</strong><div class="finding-detail">{{ f.detail }}</div>{% if f.from_scan %}<div class="faint small-text">Found in {{ f.from_scan|scan_name }}; this scan could not check the device's ports.</div>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+{# ── What it is, and whom it talks to ── #}
+<div class="band stretch">
+  <section class="card grow">
+    <h2 class="card-title">How LanWard knows what it is</h2>
+    {% if intel.chain %}
+    <ul class="chain-list">
+      {% for label, val in intel.chain[:12] %}<li><span class="dim">{{ label }}:</span> {{ val }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">Nothing yet: no scan caught it and it has not announced a name or model.</p>
+    {% endif %}
+    {% if intel.services_adv or intel.services_qry %}
+    <h3 style="margin-top:18px">mDNS</h3>
+    {% if intel.services_adv %}<div class="svc-row"><span class="dim small-text">offers</span>
+      {% for s in intel.services_adv %}<span class="pill-svc adv">{{ s }}</span>{% endfor %}</div>{% endif %}
+    {% if intel.services_qry %}<div class="svc-row"><span class="dim small-text">looks for</span>
+      {% for s in intel.services_qry %}<span class="pill-svc qry">{{ s }}</span>{% endfor %}</div>{% endif %}
+    {% endif %}
+  </section>
+
+  <section class="card side-card">
+    <h2 class="card-title">Asks for most</h2>
+    <p class="meta" style="margin-bottom:8px">The addresses it ARPs for, per day. A high rate often means it keeps
+      trying to reach something that is off.</p>
+    {% for t in intel.talks_to %}
+    <div class="list-row">
+      <span class="grow">{{ t.name or t.target_ip }}{% if t.name %} <span class="faint small-text mono">{{ t.target_ip }}</span>{% endif %}</span>
+      <span class="mono small-text">{% if t.per_day < 1 %}&lt;1{% else %}{{ "{:,.0f}".format(t.per_day) }}{% endif %}/day</span>
+      <span class="faint small-text since">{{ humanise_age(t.last_seen)|replace(' ago', '') }}</span>
+    </div>
+    {% else %}
+    <p class="meta">Nobody: it has not asked for another address.</p>
+    {% endfor %}
+  </section>
+</div>
+
+{# ── Uptime of a watched device ── #}
+{% if watch and uptime_days %}
+<section class="card" id="uptime">
+  <div class="card-head">
+    <h2 class="card-title">Uptime, last 30 days</h2>
+    <span class="meta">{% if watch.uptime.uptime_pct is not none %}{{ watch.uptime_text }}.{% else %}Measured from the
+      watcher's first check of it.{% endif %} An outage runs from the first check that finds it down until it answers again;
+      blips under 2 minutes are left out.</span>
+  </div>
+  <div class="uptime-strip" role="img" aria-label="Minutes offline per day over the last 30 days">
+    {% for d in uptime_days %}
+    <span class="{{ 'none' if d.down is none else 'ok' if d.down == 0 else 'part' if d.down < 60 else 'down' }}"
+          title="{{ d.label }}: {{ 'not watched yet' if d.down is none else 'no outage' if d.down == 0 else d.down ~ ' min offline' }}"></span>
+    {% endfor %}
+  </div>
+  <div class="uptime-scale faint small-text"><span>{{ uptime_days[0].label }}</span><span>today</span></div>
+  {% if watch.uptime.outages %}
+  <table class="wide uptime-list calm-table">
+    <thead><tr><th>Went offline</th><th>Back</th><th>For</th></tr></thead>
+    <tbody>
+    {% for o in watch.uptime.outages|reverse %}{% if loop.index <= 8 %}
+    <tr><td>{{ o.start|when }}</td><td>{{ o.end|when if o.end else 'still offline' }}</td><td>{{ o.minutes }} min</td></tr>
+    {% endif %}{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ── Open ports (2026-11-02): each port, what it is and how LanWard knows (portid.py), since when; the ones that
+   closed in the last 30 days, with where a random port moved after a restart ── #}
+{% macro port_row(p, closed=False) -%}
+<div class="port-row{{ ' closed' if closed }}">
+  <span class="pn">{{ p.port }}</span>
+  <div class="pw">
+    {%- if p.what %}<span>{{ '' if p.sure else 'probably ' }}{{ p.what }}</span>
+    {%- elif p.temporary %}<span><span class="faint">a temporary port</span> <span class="faint small-text">· phones and computers open these as apps run</span></span>
+    {%- else %}<span><span class="faint">not identified</span> <span class="faint small-text">· it didn't answer LanWard's questions</span></span>{% endif %}
+    {%- if p.moved_from %}<span class="pnote">Moved here from {{ p.moved_from|replace(',', ', ') }} after a restart</span>{% endif %}
+    {%- if closed and p.moved_to %}<span class="pnote">Closed in a restart; it came back on {{ p.moved_to|replace(',', ', ') }}</span>{% endif %}
+  </div>
+  <span class="ph">{% if p.what %}<span class="src-chip{{ ' guess' if not p.sure }}">{{ 'from ' ~ p.how if p.sure else 'a guess: the usual service on that number' }}</span>{% endif %}</span>
+  <span class="ps">
+    {%- if closed %}{{ p.since }} – {{ p.until }}
+    {%- elif p.new %}<span class="tag-new">New {{ p.since_when|replace('Today', 'today') }}</span>
+    {%- else %}since {{ p.since }}{% endif %}</span>
+</div>
+{%- endmacro %}
+{% if ports %}
+<section class="card calm" id="ports">
+  <div class="card-head">
+    <h2 class="card-title">Open ports</h2>
+    <span class="meta">{{ ports.open|length }} open{% if ports.new %} · {{ ports.new }} new this week{% endif %}{% if ports.closed %} · {{ ports.closed|length }} closed in the last 30 days{% endif %}</span>
+  </div>
+  <p class="meta port-note">What each port is and how LanWard knows. Followed since {{ ports.since }}, when LanWard began keeping this device's ports{% if not ports.current %}; as found when it was last checked, {{ ports.as_of|replace('Today', 'today') }}{% endif %}.</p>
+  <div class="port-list">
+    <div class="port-row head" aria-hidden="true"><span>Port</span><span>What it is</span><span>How LanWard knows</span><span>Open</span></div>
+    {% for p in ports.open %}{{ port_row(p) }}{% endfor %}
+    {% if not ports.open %}<p class="meta">Nothing was open when it was last checked.</p>{% endif %}
+  </div>
+  {% if ports.closed %}
+  <h3 class="pop-sub">Closed in the last 30 days</h3>
+  <div class="port-list">{% for p in ports.closed %}{{ port_row(p, True) }}{% endfor %}</div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# ── Activity (2026-11-01; was a 7-day heatmap): this device's packets as the Overview's chart, with its periods;
+   activity.js switches the period and shows the readout on hover or tap ── #}
+<section class="card activity" id="activity">
+  <div class="act-head">
+    <h2 class="card-title">Activity</h2>
+    <div class="seg push-right" role="group" aria-label="Time range" data-switch="range" hidden>
+      {% for r in activity.ranges %}<button type="button" data-value="{{ r.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ r.label }}</button>{% endfor %}
+    </div>
+  </div>
+  <p class="meta act-note">Broadcast and multicast packets LanWard heard from this device (DHCP, ARP, mDNS, LLDP). Only the
+    packets every device hears, so a quiet stretch can still be time the device was on.</p>
+  {% for v in activity.views %}{% set c = v.chart %}
+  <figure class="act-view" data-range="{{ v.range }}"{% if not loop.first %} hidden{% endif %}>
+    <div class="act-plot" style="height: {{ c.height }}px">
+      <svg viewBox="0 0 1000 {{ c.height }}" preserveAspectRatio="none" role="img"
+           aria-label="{{ v.caption }}{% if c.low is not none %}: between {{ '{:,}'.format(c.low) }} and {{ '{:,}'.format(c.high) }}{% else %}: nothing heard{% endif %}">
+        <defs><linearGradient id="dev-fill-{{ loop.index }}" x1="0" y1="0" x2="0" y2="1"><stop class="act-stop" offset="0" stop-color="#7CC8FF" stop-opacity="0.3"/><stop class="act-stop" offset="1" stop-color="#7CC8FF" stop-opacity="0"/></linearGradient>
+          <linearGradient id="dev-usual-fill-{{ loop.index }}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A78BFA" stop-opacity="0.16"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></linearGradient></defs>
+        {% for g in c.grid %}<line class="act-grid" x1="0" y1="{{ g.y }}" x2="1000" y2="{{ g.y }}"/>{% endfor %}
+        {% if c.usual_area %}<path d="{{ c.usual_area }}" fill="url(#dev-usual-fill-{{ loop.index }})"/>{% endif %}
+        {% if c.usual %}<path class="act-usual" d="{{ c.usual }}"/>{% endif %}
+        {% if c.area %}<path d="{{ c.area }}" fill="url(#dev-fill-{{ loop.index }})"/>{% endif %}
+        {% if c.line %}<path class="act-line" d="{{ c.line }}"/>{% endif %}
+        {% if c.estimate %}<path class="act-line est" d="{{ c.estimate }}"/>{% endif %}
+        {% for h in c.hits %}<rect class="act-hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="{{ c.height }}" data-cx="{{ h.cx }}"{% if h.cy is not none %} data-cy="{{ h.cy }}"{% endif %} data-tip="{{ h.tip }}"></rect>{% endfor %}
+      </svg>
+      {% for g in c.grid %}<span class="act-gl" style="top: {{ g.y }}px" aria-hidden="true">{{ g.label }}</span>{% endfor %}
+      {% for f in c.flags %}<span class="act-ring" style="left: {{ f.left }}%; top: {{ f.top }}px" aria-hidden="true"></span>{% endfor %}
+      {% if c.now %}<span class="act-now" style="left: {{ c.now.left }}%; top: {{ c.now.top }}px" aria-hidden="true"></span>{% endif %}
+      {% if c.empty %}<span class="act-empty">Nothing heard from this device in this period</span>{% endif %}
+    </div>
+    <div class="act-x" aria-hidden="true">{% for l in v.xlabels %}<span{% if l.end %} class="end"{% endif %} style="left: {{ l.left }}%">{{ l.text }}</span>{% endfor %}</div>
+    <figcaption class="act-legend">
+      <span><span class="key line" aria-hidden="true"></span>Packets</span>
+      {% if c.usual %}<span><span class="key usual" aria-hidden="true"></span>Usual for this device</span>{% endif %}
+      {% if c.flags %}<span><span class="key ring" aria-hidden="true"></span>Far from the usual</span>{% endif %}
+      {% if c.estimate %}<span><span class="key line est" aria-hidden="true"></span>{{ v.now_label }}</span>{% endif %}
+      {% if v.began %}<span>Counting began {{ v.began }}</span>{% endif %}
+    </figcaption>
+  </figure>
+  {% endfor %}
+</section>
+
+{# ── Name and watch ── #}
+<section class="card">
+  <h2 class="card-title">Name and watch</h2>
+  <form method="post" action="{{ url_for('label_set') }}" class="name-form">
+    <input type="hidden" name="mac" value="{{ mac }}">
+    <input type="hidden" name="redirect_to" value="{{ url_for('host_history', mac=mac) }}">
+    <label>Name <input type="text" name="label" value="{{ host.label or '' }}" placeholder="e.g. Kitchen Shelly" required></label>
+    <label>Note <input type="text" name="note" value="{{ host.label_note }}" placeholder="(optional)"></label>
+    <label class="check"><input type="checkbox" name="watch" {% if host.label_watch %}checked{% endif %}> Alert me when it goes offline</label>
+    <button type="submit">Save</button>
+  </form>
+  {% if host.label %}
+  <form method="post" action="{{ url_for('label_delete', mac=mac) }}" style="margin:8px 0 0"
+        data-confirm="Remove the name? The device becomes unknown again."
+        data-confirm-title="Remove name?" data-confirm-label="Remove name" data-confirm-variant="danger">
+    <button type="submit" class="small">Remove name</button>
+  </form>
+  {% endif %}
+</section>
+
+{# ── What the latest scan found ── #}
+{% if observations %}
+<h3>{{ 'Latest scan' if host.scan_id == latest_scan_id else 'Last scan that found it' }} · <a href="{{ url_for('host_in_scan', scan_id=host.scan_id, ip=host.ip) }}">{{ host.started_at|short_when }}</a></h3>
+{% with with_findings=False %}{% include "_scan_facts.html" %}{% endwith %}
+{% endif %}
+
+{# ── Every scan that caught it ── #}
+<section class="card" id="history">
+  {% if observations %}
+  <div class="card-head">
+    <h2 class="card-title">Scan history</h2>
+    <span class="meta">The last {{ observations|length }} {{ 'scan' if observations|length == 1 else 'scans' }} that caught it</span>
+  </div>
+  <div class="scroll-x">
+  <table class="calm-table">
+  <thead>
+  <tr><th>Scan</th><th>IP</th><th>Hostname</th><th>Open ports</th><th>Firmware</th><th>Findings</th></tr>
+  </thead>
+  <tbody>
+  {% for o in observations %}
+  <tr class="cat-{{ o.category }}{% if o.risky %} risky{% endif %}">
+    <td><a href="{{ url_for('host_in_scan', scan_id=o.scan_id, ip=o.ip) }}">{{ o.started_at|scan_time }}</a></td>
+    <td>{{ o.ip }}</td>
+    <td>{{ o.hostname or '-' }}</td>
+    <td>{% if o.ports_unknown %}<span class="dim">not checked</span>{% else %}{{ o.ports or '-' }}{% endif %}</td>
+    <td>{{ o.firmware or '-' }}</td>
+    <td>{{ o.findings_list|length or '-' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+  {% else %}
+  <h2 class="card-title">Scan history</h2>
+  <p class="meta">No scan has caught this device: it was asleep or away at every scan, or only visited briefly.
+    Everything above comes from listening.</p>
+  {% endif %}
+</section>
+{% endblock %}

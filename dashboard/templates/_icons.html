@@ -1,0 +1,14 @@
+{# Line icons (2026-10-27): one SVG path each (ALERT_KINDS, SERVICE_LOOKS in app.py), drawn in currentColor.
+   Glyphs (2026-11-01): LanWard's own solid shapes with cut-outs (CAT_ICONS per kind of device, GLYPHS), filled.
+   Import with context, for cat_icons: {% from "_icons.html" import icon, glyph, cat_icon with context %} #}
+{% macro icon(d, size=18) -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ d }}"/></svg>
+{%- endmacro %}
+
+{% macro glyph(d, size=18, cls='') -%}
+<svg{% if cls %} class="{{ cls }}"{% endif %} width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="{{ d }}"/></svg>
+{%- endmacro %}
+
+{% macro cat_icon(cat, size=18) -%}
+{{ glyph(cat_icons.get(cat) or cat_icons['other'], size) }}
+{%- endmacro %}

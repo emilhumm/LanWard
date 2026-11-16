@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+{# Apply the saved theme before first paint so there is no flash. Dark is the default; "system" follows the OS. #}
+<script>
+(function () {
+  try {
+    var KEY = "lanward-theme";
+    var pref = localStorage.getItem(KEY) || "dark";
+    var mq = window.matchMedia("(prefers-color-scheme: light)");
+    var effective = function () { return pref === "system" ? (mq.matches ? "light" : "dark") : pref; };
+    var apply = function () { document.documentElement.setAttribute("data-theme", effective()); };
+    apply();
+    try { mq.addEventListener("change", function () { if (pref === "system") apply(); }); } catch (e) {}
+    window.__nsTheme = { get: function () { return pref; },
+                         set: function (v) { pref = v; try { localStorage.setItem(KEY, v); } catch (e) {} apply(); } };
+  } catch (e) {}
+})();
+</script>
+<title>{% block title %}LanWard{% endblock %}</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_v }}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_v }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500..800&family=Instrument+Sans:wdth,wght@75..100,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_v }}">
+<script src="{{ url_for('static', filename='htmx.min.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='search.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='suggest.js') }}?v={{ asset_v }}" defer></script>
+{# Page scripts load once here and re-run on each htmx navigation via nsReady(); they no-op on pages
+   that lack their elements. (htmx does not re-execute <script> tags pulled in by a swap.) #}
+<script src="{{ url_for('static', filename='activity.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='netmap.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='popups.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='details.js') }}?v={{ asset_v }}" defer></script>
+<script src="{{ url_for('static', filename='settings.js') }}?v={{ asset_v }}" defer></script>
+</head>
+<body hx-boost="true">
+{# The page is lit by the network's state (2026-11-01, "Signature"): the Overview sets the colour from its status,
+   every other page gets a quiet neutral light #}
+<div class="ambient {% block ambient %}{% endblock %}" aria-hidden="true"></div>
+<header class="site">
+  <div class="header-inner">
+    <a class="brand" href="{{ url_for('home') }}">
+      <span class="brand-tile" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.5l3.2 11.5L12 9.5l5.3 8.5 3.2-11.5"/></svg></span>
+      LanWard
+    </a>
+    {% set ep = request.endpoint or '' %}
+    <nav class="main-nav" aria-label="Main">
+      <a href="{{ url_for('home') }}" class="{{ 'active' if ep == 'home' }}">Overview</a>
+      <a href="{{ url_for('network') }}" class="{{ 'active' if ep == 'network' }}">Network</a>
+      <a href="{{ url_for('devices') }}" class="{{ 'active' if ep in ('devices', 'host_in_scan', 'host_history', 'run_scan', 'scan_status') }}">Devices</a>
+      <a href="{{ url_for('alerts') }}" class="{{ 'active' if ep == 'alerts' }}">Alerts{% if unread_alerts %} <span class="badge">{{ unread_alerts }}</span>{% endif %}</a>
+      <a href="{{ url_for('flows') }}" class="{{ 'active' if ep in ('flows', 'network_services', 'observations') }}">Traffic</a>
+      <a href="{{ url_for('settings') }}" class="{{ 'active' if ep == 'settings' }}">Settings</a>
+    </nav>
+    <div class="header-tools">
+      <button type="button" class="scan-btn search-toggle" id="search-toggle"
+              aria-expanded="false" aria-controls="search-panel" title="Search">
+        <svg class="scan-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search</span>
+      </button>
+      {% with running = scan_running %}{% include "_scan_button.html" %}{% endwith %}
+      {% if login_on %}
+      <form method="post" action="{{ url_for('logout') }}" style="margin:0" hx-boost="false">
+        <button type="submit" class="hdr-btn" title="Log out" aria-label="Log out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {# Search drops down under the header when the Search button is pressed (suggest.js) #}
+  <div class="search-wrap" id="search-panel" hidden>
+    <form class="search-form" action="{{ url_for('search') }}" method="get" role="search"
+          data-suggest="{{ url_for('search_suggest') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <label for="q" class="visually-hidden">Search devices</label>
+      <input id="q" type="text" name="q" placeholder="Name, IP, MAC, maker, port…" autocomplete="off"
+             role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="sg-menu"
+             value="{{ request.args.get('q', '') if ep == 'search' else '' }}">
+      <button type="button" class="search-close" id="search-close" aria-label="Close search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </form>
+    <div class="sg-menu" id="sg-menu" role="listbox" aria-label="Device suggestions" hidden></div>
+  </div>
+</header>
+<main>
+{% if on_default_password %}
+<div class="pw-banner" role="alert">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+  <div class="b-txt">
+    <strong>You're still using the default password.</strong>
+    Anyone on your network can open this dashboard until you change it.
+    <a href="{{ url_for('settings') }}#login">Set your own password →</a>
+  </div>
+</div>
+{% endif %}
+{% block content %}{% endblock %}
+</main>
+<div id="modal"></div>
+</body>
+</html>

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Devices · LanWard{% endblock %}
+{% block content %}
+{% from "_icons.html" import cat_icon with context %}
+
+{% if not selected %}
+<section class="page-head">
+  <div class="grow">
+    <div class="head-row">
+      <h1>Devices</h1>
+      <button type="button" class="scan-btn" data-scan-open="{{ url_for('scan_dialog') }}">
+        <svg class="scan-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+        <span>Run scan</span>
+      </button>
+    </div>
+    <p class="facts">No scan yet. The first one runs a couple of minutes after the container starts, or use Run scan.</p>
+  </div>
+</section>
+{% else %}
+<section class="page-head">
+  <div class="grow">
+    <div class="head-row">
+      <h1>Devices</h1>
+      <button type="button" class="scan-btn" data-scan-open="{{ url_for('scan_dialog') }}">
+        <svg class="scan-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+        <span>Run scan</span>
+      </button>
+    </div>
+    <p class="facts">
+      LanWard is keeping an eye on <strong>{{ kpi.host_count }}</strong> devices on your network.
+      <strong>{{ kpi.live_count }}</strong> checked in within the last 5 minutes{% if kpi.live_count < kpi.host_count %} — the rest are simply quiet{% endif %}.
+      {% if kpi.unlabeled %}<a class="warn" href="{{ url_for('devices', scan=request.args.get('scan'), show='look') }}"><strong>{{ kpi.unlabeled }}</strong> still {{ 'needs' if kpi.unlabeled == 1 else 'need' }} a name</a>{% else %}Every one has a name you’ve given it{% endif %}, and
+      {% if kpi.with_findings %}<a class="warn" href="{{ url_for('devices', scan=request.args.get('scan'), show='look') }}"><strong>{{ kpi.with_findings }}</strong> {{ 'has' if kpi.with_findings == 1 else 'have' }} something worth a look</a>{% else %}this scan turned up <span class="ok">nothing that needs a look</span>{% endif %}.
+    </p>
+    {% if missing %}<p class="meta warn-text">That scan is no longer kept; this is the latest one.</p>{% endif %}
+  </div>
+  <div class="page-head-aside">
+    {# The scan picker: which scan the facts, kinds and table show #}
+    <form method="get" action="{{ url_for('devices') }}" class="scan-pick">
+      {% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+      <select class="pill-select" name="scan" onchange="this.form.submit()" aria-label="Pick a scan">
+        {% for s in scans %}
+        <option value="{{ s.id }}"{% if s.id == selected.id %} selected{% endif %}>{{ s.started_at|short_when }} · {{ s.host_count }} devices</option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit">Show</button></noscript>
+    </form>
+  </div>
+</section>
+
+<section class="card calm table-card">
+<div class="table-head">
+  <label class="search-box">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <span class="visually-hidden">Filter the devices</span>
+    <input class="table-filter" type="text" placeholder="Filter by name, IP, maker, port…">
+  </label>
+  <nav class="seg-links" aria-label="Show">
+    {% for key, label in [(None, 'All'), ('look', 'Needs a look'), ('tips', 'With tips')] %}
+    {# Only show "Needs a look" / "With tips" when there is something there (or you are already on it) #}
+    {% if key is none or counts[key] or show == key %}
+    <a href="{{ url_for('devices', scan=request.args.get('scan'), show=key, sort=request.args.get('sort')) }}" class="{{ 'active' if show == key }}"{% if show == key %} aria-current="page"{% endif %}>{{ label }} <span class="n">{{ counts[key or 'all'] }}</span></a>
+    {% endif %}
+    {% endfor %}
+  </nav>
+</div>
+{% if kpi.category_dist %}
+<nav class="kind-chips" aria-label="Filter by kind">
+  {% for cat, n in kpi.category_dist.most_common() %}
+  <a class="cat-{{ cat }}{{ ' active' if cat == active_cat }}" href="{{ url_for('devices', scan=request.args.get('scan'), sort=request.args.get('sort'), show=show or None, cat=(None if cat == active_cat else cat)) }}"{% if cat == active_cat %} aria-current="true"{% endif %}>{{ cat_icon(cat, 14) }}{{ cat|cat_label }} <span class="n">{{ n }}</span></a>
+  {% endfor %}
+</nav>
+{% endif %}
+  {% if hosts %}
+  {% with rows=hosts, show_activity=True, presorted=attention %}{% include "_hosts_table.html" %}{% endwith %}
+  <p class="meta filter-empty" data-filter-empty hidden>No devices match “<span data-filter-q></span>”.</p>
+  <p class="table-hint table-hint-foot">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+    Hover the dot, a port or a security badge to see what it means.
+  </p>
+  {% else %}
+  <p class="meta">Nothing to show here: {{ 'no device needs a look' if show == 'look' else 'no device has tips' }}.
+    <a href="{{ url_for('devices', scan=request.args.get('scan')) }}">Show all devices</a></p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% endblock %}
